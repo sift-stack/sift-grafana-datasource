@@ -1,0 +1,105 @@
+import { DataSourceJsonData, QueryVariableModel, VariableWithOptions } from '@grafana/data';
+import { DataQuery } from '@grafana/schema';
+
+export interface Asset {
+  assetId: string;
+  name: string;
+}
+
+export interface Run {
+  runId: string;
+  name: string;
+  startTime: string;
+  stopTime: string;
+}
+
+export interface Channel {
+  channelId: string;
+  name: string;
+  assetId: string;
+  assetName: string;
+  unit?: string;
+  dataType?: string;
+}
+
+export interface ChannelQuery {
+  channelId?: string;
+  channelName?: string;
+  nameAsRegex?: boolean;
+  asSelect?: boolean;
+}
+export interface AssetQuery {
+  assetId?: string;
+  assetName?: string;
+  nameAsRegex?: boolean;
+  asSelect?: boolean;
+  dashboardVariableName?: string;
+}
+
+export interface RunQuery {
+  runId?: string;
+  runName?: string;
+  nameAsRegex?: boolean;
+  asSelect?: boolean;
+}
+
+export interface ChannelReferenceQuery extends ChannelQuery {
+  channelReference: string;
+}
+
+export interface CalculatedChannelDataQuery {
+  name: string;
+  channelReferences: ChannelReferenceQuery[];
+  expression: string;
+}
+
+export interface ChannelDataQuery {
+  assetQueries?: AssetQuery[];
+  runQueries?: RunQuery[];
+  channelQueries?: ChannelQuery[];
+  calculatedChannelQueries?: CalculatedChannelDataQuery[];
+}
+
+export interface SiftQuery extends DataQuery {
+  channelDataQueries?: ChannelDataQuery[];
+  combineRuns?: boolean;
+  queryVersion: string;
+}
+
+export const DEFAULT_QUERY: Partial<SiftQuery> = {
+  channelDataQueries: [],
+  combineRuns: true,
+  queryVersion: '2',
+};
+
+/**
+ * These are options configured for each DataSource instance
+ */
+export interface SiftDataSourceOptions extends DataSourceJsonData {
+  url?: string;
+}
+
+/**
+ * Value that is used in the backend, but never sent over HTTP to the frontend
+ */
+export interface SiftSecureJsonData {
+  apiKey?: string;
+}
+
+/**
+ * SiftVariableQuery is used to for queries to the backend for loading data for variable selection
+ */
+export interface SiftVariableQuery extends DataQuery {}
+
+export type AssetGrafanaVariable = VariableWithOptions & QueryVariableModel;
+
+export type ChannelDataQueryId = string;
+export type CalculatedChannelQueryId = string;
+export type ChannelQueryId = string;
+
+export const QueryTypes = {
+  CHANNEL: 'channel',
+  CALCULATED_CHANNEL: 'calculatedChannel',
+};
+
+export type QueryType = (typeof QueryTypes)[keyof typeof QueryTypes];

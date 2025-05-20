@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# cd back to repo root
+changed_go_files=($(git diff --cached --name-only --diff-filter=ACM | grep \\.go$))
+
+if [[ ! -z "$changed_go_files" ]]; then
+  # format Go
+  echo "running gofmt"
+  formatted_go_files=$(gofmt -l -w ${changed_go_files[@]})
+  if [[ ! -z "$formatted_go_files" ]]; then
+    echo -e "ERROR! The following Go files were reformatted. Please stage the changes and recommit.\n"$formatted_go_files
+    exit 1
+  fi
+
+  # lint Go
+  echo "running golangci-lint"
+  golangci_lint_output=$(golangci-lint run)
+  if [[ ! -z "$golangci_lint_output" ]]; then
+    echo -e "ERROR! golangci-lint found the following problems.\n$golangci_lint_output"
+    exit 1
+  fi
+
+  changed_go_files=$(git diff --name-only --diff-filter=M | grep '\.go$')
+  if [[ ! -z "$changed_go_files" ]]; then
+    echo -e "ERROR! swag fmt made changes to files. Please stage the changes and recommit.\n"
+    exit 1
+  fi
+fi

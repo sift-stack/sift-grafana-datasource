@@ -25,6 +25,7 @@ Enter these values when creating the data source in Grafana.
 5. Query will be run after selection or clicking outside the input or by clicking the Refresh button
 6. Additional Queries can be added using the "Add Query" button to use both Channel and Calculated Channel queries in the same panel
 
+
 #### Selection Types
 
 Selection of Assets, Runs, and Channels can be done using multiple different input types. Input type may be changed using the "Change input type" button.

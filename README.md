@@ -52,7 +52,7 @@ Channels and Runs can only use the Selection type when an Asset option has been 
 
 #### Grouping
 
-By default, data is grouped by Channel and Run. To combine data from multiple Runs into a single trace, select "Combine Runs".
+By default, data is combined from multiple Runs into a single trace. To group by Channel and Run , uncheck "Combine Runs".
 
 #### Asset Query Variables
 

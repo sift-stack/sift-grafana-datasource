@@ -8,6 +8,7 @@ datasources:
     orgId: 1
     version: 1
     editable: true
+    uid: 'P5B56D21E16392E86'
     jsonData:
       url: ${SIFT_API_URL}
     secureJsonData:

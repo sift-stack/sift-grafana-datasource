@@ -1,0 +1,623 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 2,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "sift-grafana-datasource",
+        "uid": "P5B56D21E16392E86"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "dashboardVariableName": "${assetQuery}"
+                }
+              ],
+              "calculatedChannelQueries": [],
+              "channelQueries": [
+                {
+                  "asSelect": true,
+                  "channelId": "af1df697-5dbd-4761-96b4-8da636459f01",
+                  "channelName": "battery_charge"
+                },
+                {
+                  "asSelect": true,
+                  "channelId": "433fec74-e9db-4b31-89ea-e8095364cca9",
+                  "channelName": "motor_a.temperature"
+                }
+              ],
+              "runQueries": [
+                {
+                  "asSelect": true
+                }
+              ]
+            }
+          ],
+          "combineRuns": false,
+          "datasource": {
+            "type": "sift-grafana-datasource",
+            "uid": "P5B56D21E16392E86"
+          },
+          "queryVersion": "2",
+          "refId": "A"
+        }
+      ],
+      "title": "Query with Runs",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "/^(.*){.*run=\"(.*)\", run_id.*/",
+            "renamePattern": "$1 - Run: $2"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "sift-grafana-datasource",
+        "uid": "P5B56D21E16392E86"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "dashboardVariableName": "${assetQuery}"
+                }
+              ],
+              "calculatedChannelQueries": [],
+              "channelQueries": [
+                {
+                  "asSelect": true,
+                  "channelId": "af1df697-5dbd-4761-96b4-8da636459f01",
+                  "channelName": "battery_charge"
+                },
+                {
+                  "asSelect": true,
+                  "channelId": "433fec74-e9db-4b31-89ea-e8095364cca9",
+                  "channelName": "motor_a.temperature"
+                }
+              ],
+              "runQueries": [
+                {
+                  "asSelect": true
+                }
+              ]
+            }
+          ],
+          "combineRuns": true,
+          "datasource": {
+            "type": "sift-grafana-datasource",
+            "uid": "P5B56D21E16392E86"
+          },
+          "queryVersion": "2",
+          "refId": "A"
+        }
+      ],
+      "title": "Query without Runs",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "/^(.*){.*/",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "sift-grafana-datasource",
+        "uid": "P5B56D21E16392E86"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "dashboardVariableName": "${assetQuery}"
+                }
+              ],
+              "calculatedChannelQueries": [
+                {
+                  "channelReferences": [
+                    {
+                      "asSelect": true,
+                      "channelId": "af1df697-5dbd-4761-96b4-8da636459f01",
+                      "channelName": "battery_charge",
+                      "channelReference": "$1"
+                    },
+                    {
+                      "asSelect": true,
+                      "channelId": "433fec74-e9db-4b31-89ea-e8095364cca9",
+                      "channelName": "motor_a.temperature",
+                      "channelReference": "$2"
+                    }
+                  ],
+                  "expression": "$1 / $2",
+                  "name": "My-Calculation"
+                }
+              ],
+              "channelQueries": [
+                {
+                  "asSelect": true
+                }
+              ],
+              "runQueries": [
+                {
+                  "asSelect": true
+                }
+              ]
+            }
+          ],
+          "combineRuns": true,
+          "datasource": {
+            "type": "sift-grafana-datasource",
+            "uid": "P5B56D21E16392E86"
+          },
+          "queryVersion": "2",
+          "refId": "A"
+        }
+      ],
+      "title": "Calculated Channel",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "/^(.*){.*/",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "sift-grafana-datasource",
+        "uid": "P5B56D21E16392E86"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "mamp"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "voltage "
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "volt"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "assetName": "rover_1",
+                  "nameAsRegex": true
+                }
+              ],
+              "calculatedChannelQueries": [],
+              "channelQueries": [
+                {
+                  "channelName": "\\.current",
+                  "nameAsRegex": true
+                },
+                {
+                  "channelName": "voltage"
+                }
+              ],
+              "runQueries": [
+                {
+                  "runName": ""
+                }
+              ]
+            }
+          ],
+          "combineRuns": true,
+          "datasource": {
+            "type": "sift-grafana-datasource",
+            "uid": "P5B56D21E16392E86"
+          },
+          "queryVersion": "2",
+          "refId": "A"
+        }
+      ],
+      "title": "Query with Regex",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "/^(.*){.*/",
+            "renamePattern": "$1"
+          }
+        }
+      ],
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "rover_1",
+          "value": "60a0e291-9ce7-4d45-bdea-bb0a2c2afe65"
+        },
+        "datasource": {
+          "type": "sift-grafana-datasource",
+          "uid": "P5B56D21E16392E86"
+        },
+        "definition": "",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Asset",
+        "multi": false,
+        "name": "assetQuery",
+        "options": [],
+        "query": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "2025-05-22T17:26:41.268Z",
+    "to": "2025-05-22T17:32:27.298Z"
+  },
+  "timeRangeUpdatedDuringEditOrView": false,
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
+  "timezone": "",
+  "title": "Sift Sample Dashboard",
+  "version": 1,
+  "weekStart": ""
+}

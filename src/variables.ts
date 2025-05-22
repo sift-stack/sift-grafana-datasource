@@ -12,6 +12,10 @@ export class SiftVariableSupport extends CustomVariableSupport<SiftDataSource, S
   }
   editor = SiftVariableQueryEditor;
 
+  getDefaultQuery(): Partial<SiftVariableQuery> {
+    return {};
+  }
+
   query(_request: DataQueryRequest<SiftVariableQuery>): Observable<DataQueryResponse> {
     return from(
       this.datasource

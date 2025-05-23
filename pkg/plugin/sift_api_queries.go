@@ -133,9 +133,6 @@ func executeRequest(req apiRequest) ([]byte, error) {
 
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("User-Agent", fmt.Sprintf("sift-grafana-datasource/%s %s", req.pCtx.PluginVersion, req.pCtx.UserAgent.String()))
-	if req.pCtx.User != nil {
-		httpReq.Header.Set("X-Grafana-User-Email", req.pCtx.User.Email)
-	}
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {

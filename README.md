@@ -1,8 +1,20 @@
 # Sift Grafana Datasource
 
+[![Grafana 11](https://img.shields.io/badge/Grafana-11.0.0%2B-orange)](https://grafana.com)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/sift-stack/sift-grafana-datasource)](https://github.com/sift-stack/sift-grafana-datasource/releases)
+
 ## Overview
 
 This is a Grafana datasource plugin for [Sift](https://www.siftstack.com/). It allows you to query Sift for data and visualize it in Grafana dashboards. The plugin supports both simple channel queries and calculated channel expressions.
+
+<img alt="Grafana Query Screenshot - Channel Query" src="./src/img/channel-query.png" width="400">
+
+<img alt="Grafana Query Screenshot - Calculated Channel Query" src="./src/img/calculated-query.png" width="400">
+
+## Compatibility
+
+This plugin is compatible with Grafana versions `11.0.0` and above.
 
 ## User Guide
 
@@ -14,7 +26,7 @@ To configure the plugin, you will need:
 2. A valid Sift API key
 
 Instructions for getting these values can be found in the [Sift documentation](https://docs.siftstack.com/docs/api/authentication).
-Enter these values when creating the data source in Grafana.
+Enter these values when creating the datasource in Grafana.
 
 ### Usage
 
@@ -24,6 +36,7 @@ Enter these values when creating the data source in Grafana.
 4. Configure query
 5. Query will be run after selection or clicking outside the input or by clicking the Refresh button
 6. Additional Queries can be added using the "Add Query" button to use both Channel and Calculated Channel queries in the same panel
+
 
 #### Selection Types
 
@@ -39,7 +52,7 @@ Channels and Runs can only use the Selection type when an Asset option has been 
 
 #### Grouping
 
-By default, data is grouped by Channel and Run. To combine data from multiple Runs into a single trace, select "Combine Runs".
+By default, data is combined from multiple Runs into a single trace. To group by Channel and Run , uncheck "Combine Runs".
 
 #### Asset Query Variables
 
@@ -73,3 +86,13 @@ where the right side of the query range is close to live, new data will always b
 Asset, Run, and Channel queries are cached to speed up regular expression queries. These caches will expire after 10 minutes.
 
 Both caches may be cleared for a panel by clicking the "Clear cache" button next to the Query Mode selector.
+
+## Learn More
+
+- [Sift](https://www.siftstack.com/)
+- [Sift Documentation](https://docs.siftstack.com/)
+- [Sift Grafana Datasource Repository](https://github.com/sift-stack/sift-grafana-datasource)
+
+## Contributing
+
+Please submit bug reports and pull requests to the [Sift Grafana Datasource](https://github.com/sift-stack/sift-grafana-datasource) repository on GitHub.

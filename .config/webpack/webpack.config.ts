@@ -165,6 +165,7 @@ const config = async (env): Promise<Configuration> => {
             },
             compress: {
               drop_console: ['log', 'info'],
+              side_effects: false, // needed to render the QueryEditor component!
             },
           },
         }),

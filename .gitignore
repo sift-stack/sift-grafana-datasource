@@ -51,3 +51,6 @@ tmp/
 # Mac
 
 .DS_Store
+
+# Misc
+.env

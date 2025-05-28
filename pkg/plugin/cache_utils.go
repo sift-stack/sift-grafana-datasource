@@ -32,7 +32,7 @@ func NewTypedCacheWithRandomTtl[K comparable, V any](maxTtl, minTtl time.Duratio
 	}
 }
 
-// Set adds an item to the cache,on
+// Set adds an item to the cache. Always calls getRandomizedTimeToLive, but if instantiated with NewTypedCache, this is always the default
 func (tc *TypedCache[K, V]) Set(key K, value V) {
 	d := tc.getRandomizedTimeToLive()
 	tc.cache.Set(fmt.Sprintf("%v", key), value, d)
@@ -65,6 +65,7 @@ func (tc *TypedCache[K, V]) Flush() {
 	tc.cache.Flush()
 }
 
+// randomly computes a time to live between minTtl and maxTtl
 func (tc *TypedCache[K, V]) getRandomizedTimeToLive() time.Duration {
 	if tc.minTtl == tc.maxTtl || tc.maxTtl < tc.minTtl {
 		return tc.minTtl

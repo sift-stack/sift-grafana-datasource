@@ -34,7 +34,7 @@ func NewTypedCacheWithRandomTtl[K comparable, V any](maxTtl, minTtl time.Duratio
 
 // Set adds an item to the cache,on
 func (tc *TypedCache[K, V]) Set(key K, value V) {
-	d = tc.getRandomizedTimeToLive()
+	d := tc.getRandomizedTimeToLive()
 	tc.cache.Set(fmt.Sprintf("%v", key), value, d)
 }
 

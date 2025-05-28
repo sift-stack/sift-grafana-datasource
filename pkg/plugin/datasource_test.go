@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -81,15 +80,15 @@ func (s *DatasourceTestSuite) SetupSuite() {
 	}
 
 	// Initialize the datasource with caches
-	assetsIdsCache := expirable.NewLRU[string, string](0, nil, 0)
-	assetsNameCache := expirable.NewLRU[string, string](0, nil, 0)
-	assetsRegexCache := expirable.NewLRU[string, []string](0, nil, 0)
-	runIdsCache := expirable.NewLRU[string, string](0, nil, 0)
-	runsNameCache := expirable.NewLRU[string, []string](0, nil, 0)
-	runsRegexCache := expirable.NewLRU[string, []string](0, nil, 0)
-	channelIdsCache := expirable.NewLRU[string, Channel](0, nil, 0)
-	channelRegexCache := expirable.NewLRU[channelCacheKey, []Channel](0, nil, 0)
-	channelNameCache := expirable.NewLRU[channelCacheKey, []Channel](0, nil, 0)
+	assetsIdsCache := NewTypedCache[string, string](0, 0)
+	assetsNameCache := NewTypedCache[string, string](0, 0)
+	assetsRegexCache := NewTypedCache[string, []string](0, 0)
+	runIdsCache := NewTypedCache[string, string](0, 0)
+	runsNameCache := NewTypedCache[string, []string](0, 0)
+	runsRegexCache := NewTypedCache[string, []string](0, 0)
+	channelIdsCache := NewTypedCache[string, Channel](0, 0)
+	channelRegexCache := NewTypedCache[string, []Channel](0, 0)
+	channelNameCache := NewTypedCache[string, []Channel](0, 0)
 
 	s.datasource = &SiftDatasource{
 		assetsIdSearchCache:      assetsIdsCache,

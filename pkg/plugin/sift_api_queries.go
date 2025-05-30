@@ -293,7 +293,7 @@ func (d *SiftDatasource) getValidAssetsById(pCtx backend.PluginContext, assetIds
 	validAssetIds := []string{}
 	for _, a := range assets {
 		validAssetIds = append(validAssetIds, a.AssetId)
-		d.assetsIdSearchCache.Add(a.AssetId, a.AssetId)
+		d.assetsIdSearchCache.Set(a.AssetId, a.AssetId)
 	}
 
 	validAssetIds = append(validAssetIds, cachedAssetIds...)
@@ -357,9 +357,9 @@ func (d *SiftDatasource) getAssetIdsByName(pCtx backend.PluginContext, assetName
 	}
 
 	if asRegex {
-		d.assetsRegexSearchCache.Add(assetName, assetIds)
+		d.assetsRegexSearchCache.Set(assetName, assetIds)
 	} else if len(assetIds) > 0 {
-		d.assetsNameSearchCache.Add(assetName, assetIds[0])
+		d.assetsNameSearchCache.Set(assetName, assetIds[0])
 	}
 
 	log.DefaultLogger.Info("getAssetIdsByName", "duration", time.Since(startTime).Milliseconds(), "search", assetName, "asRegex", asRegex, "assetIds", assetIds)
@@ -413,7 +413,7 @@ func (d *SiftDatasource) getValidRunsById(pCtx backend.PluginContext, runIdOrCli
 	validRunIds := []string{}
 	for _, r := range runs {
 		validRunIds = append(validRunIds, r.RunId)
-		d.runsIdSearchCache.Add(r.RunId, r.RunId)
+		d.runsIdSearchCache.Set(r.RunId, r.RunId)
 	}
 
 	validRunIds = append(validRunIds, cachedRunIds...)
@@ -473,9 +473,9 @@ func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []
 	}
 
 	if asRegex {
-		d.runsRegexSearchCache.Add(runName, runIds)
+		d.runsRegexSearchCache.Set(runName, runIds)
 	} else {
-		d.runsNameSearchCache.Add(runName, runIds)
+		d.runsNameSearchCache.Set(runName, runIds)
 	}
 
 	log.DefaultLogger.Info("getRunIdsByName", "duration", time.Since(startTime).Milliseconds(), "assetIds", assetIds, "search", runName, "asRegex", asRegex, "runIds", runIds)
@@ -527,7 +527,7 @@ func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds 
 	}
 
 	for _, channel := range channels {
-		d.channelsIdSearchCache.Add(channel.ChannelId, channel)
+		d.channelsIdSearchCache.Set(channel.ChannelId, channel)
 	}
 
 	channels = append(channels, cachedChannels...)
@@ -545,12 +545,12 @@ func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId s
 	}
 
 	if asRegex {
-		cachedChannels, found := d.channelsRegexSearchCache.Get(cacheKey)
+		cachedChannels, found := d.channelsRegexSearchCache.Get(cacheKey.String())
 		if found {
 			return cachedChannels, nil
 		}
 	} else {
-		cachedChannels, found := d.channelsNameSearchCache.Get(cacheKey)
+		cachedChannels, found := d.channelsNameSearchCache.Get(cacheKey.String())
 		if found {
 			return cachedChannels, nil
 		}
@@ -586,9 +586,9 @@ func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId s
 	}
 
 	if asRegex {
-		d.channelsRegexSearchCache.Add(cacheKey, channels)
+		d.channelsRegexSearchCache.Set(cacheKey.String(), channels)
 	} else {
-		d.channelsNameSearchCache.Add(cacheKey, channels)
+		d.channelsNameSearchCache.Set(cacheKey.String(), channels)
 	}
 
 	log.DefaultLogger.Info("getChannelsByName", "duration", time.Since(startTime).Milliseconds(), "search", channelName, "assetId", assetId, "asRegex", asRegex, "noOfChannels", len(channels))

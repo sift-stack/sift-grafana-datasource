@@ -19,7 +19,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -53,27 +52,32 @@ var ValidSiftGrafanaDataTypes = []string{
 	// Note: No bytes
 }
 
-const cacheTimeToLive = time.Minute * 10
-const regexCacheTimeToLive = time.Minute * 10
+const cacheTimeToLiveMax = time.Minute * 10
+const cacheTimeToLiveMin = cacheTimeToLiveMax / 2
+const cachePurgeTime = time.Minute * 5
 
 type channelCacheKey struct {
 	assetId string
 	search  string
 }
 
+func (c channelCacheKey) String() string {
+	return fmt.Sprintf("[%s] %s", c.assetId, c.search)
+}
+
 // NewSiftDatasource creates a new datasource instance.
 func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	// Cache logic - ID and Name caches can be long-lived since any misses will result in call to the API
 	// Regex caches are shorter since any newly added Assets/Runs/Channels won't be matched unless a new API call is made
-	assetsIdsCache := expirable.NewLRU[string, string](0, nil, cacheTimeToLive)
-	assetsNameCache := expirable.NewLRU[string, string](0, nil, cacheTimeToLive)
-	assetsRegexCache := expirable.NewLRU[string, []string](0, nil, regexCacheTimeToLive)
-	runIdsCache := expirable.NewLRU[string, string](0, nil, cacheTimeToLive)
-	runsNameCache := expirable.NewLRU[string, []string](0, nil, cacheTimeToLive)
-	runsRegexCache := expirable.NewLRU[string, []string](0, nil, regexCacheTimeToLive)
-	channelIdsCache := expirable.NewLRU[string, Channel](0, nil, cacheTimeToLive)
-	channelRegexCache := expirable.NewLRU[channelCacheKey, []Channel](0, nil, regexCacheTimeToLive)
-	channelNameCache := expirable.NewLRU[channelCacheKey, []Channel](0, nil, cacheTimeToLive)
+	assetsIdsCache := NewTypedCache[string, string](cacheTimeToLiveMax, cachePurgeTime)
+	assetsNameCache := NewTypedCacheWithRandomTtl[string, string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+	assetsRegexCache := NewTypedCacheWithRandomTtl[string, []string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+	runIdsCache := NewTypedCache[string, string](cacheTimeToLiveMax, cachePurgeTime)
+	runsNameCache := NewTypedCacheWithRandomTtl[string, []string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+	runsRegexCache := NewTypedCacheWithRandomTtl[string, []string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+	channelIdsCache := NewTypedCache[string, Channel](cacheTimeToLiveMax, cachePurgeTime)
+	channelNameCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+	channelRegexCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	return &SiftDatasource{
 		assetsIdSearchCache:      assetsIdsCache,
 		assetsRegexSearchCache:   assetsRegexCache,
@@ -90,15 +94,15 @@ func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) 
 // SiftDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 type SiftDatasource struct {
-	assetsIdSearchCache      *expirable.LRU[string, string]
-	assetsNameSearchCache    *expirable.LRU[string, string] // assets are unique by name
-	assetsRegexSearchCache   *expirable.LRU[string, []string]
-	runsIdSearchCache        *expirable.LRU[string, string]
-	runsNameSearchCache      *expirable.LRU[string, []string] // runs are not unique by name
-	runsRegexSearchCache     *expirable.LRU[string, []string]
-	channelsIdSearchCache    *expirable.LRU[string, Channel]
-	channelsNameSearchCache  *expirable.LRU[channelCacheKey, []Channel]
-	channelsRegexSearchCache *expirable.LRU[channelCacheKey, []Channel]
+	assetsIdSearchCache      *TypedCache[string, string]
+	assetsNameSearchCache    *TypedCache[string, string] // assets are unique by name
+	assetsRegexSearchCache   *TypedCache[string, []string]
+	runsIdSearchCache        *TypedCache[string, string]
+	runsNameSearchCache      *TypedCache[string, []string] // runs are not unique by name
+	runsRegexSearchCache     *TypedCache[string, []string]
+	channelsIdSearchCache    *TypedCache[string, Channel]
+	channelsNameSearchCache  *TypedCache[string, []Channel]
+	channelsRegexSearchCache *TypedCache[string, []Channel]
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance

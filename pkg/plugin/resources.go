@@ -138,15 +138,15 @@ func (d *SiftDatasource) callResourceChannels(ctx context.Context, req *backend.
 // callPurgeCache purges the cache of the SiftDatasource. Useful for when a Run/Asset/Channel is recently added in Sift
 // but is not showing up from a query.
 func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
-	d.assetsIdSearchCache.Purge()
-	d.assetsNameSearchCache.Purge()
-	d.assetsRegexSearchCache.Purge()
-	d.runsIdSearchCache.Purge()
-	d.runsNameSearchCache.Purge()
-	d.runsRegexSearchCache.Purge()
-	d.channelsIdSearchCache.Purge()
-	d.channelsNameSearchCache.Purge()
-	d.channelsRegexSearchCache.Purge()
+	d.assetsIdSearchCache.Flush()
+	d.assetsNameSearchCache.Flush()
+	d.assetsRegexSearchCache.Flush()
+	d.runsIdSearchCache.Flush()
+	d.runsNameSearchCache.Flush()
+	d.runsRegexSearchCache.Flush()
+	d.channelsIdSearchCache.Flush()
+	d.channelsNameSearchCache.Flush()
+	d.channelsRegexSearchCache.Flush()
 
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,

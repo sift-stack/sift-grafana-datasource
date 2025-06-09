@@ -855,6 +855,12 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		frame.Fields...,
 	)
 
+	// Add frame metadata
+	frame.Meta = &data.FrameMeta{
+		Type:        data.FrameTypeTimeSeriesWide,
+		TypeVersion: data.FrameTypeVersion{0, 1},
+	}
+
 	return frame, nil
 }
 

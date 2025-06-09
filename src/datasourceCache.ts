@@ -12,6 +12,7 @@ import {
 } from '@grafana/data';
 import { Observable, firstValueFrom } from 'rxjs';
 import { SiftQuery } from './types';
+import { replaceTemplateVariablesInQuery } from './utils';
 
 // Any data newer than this will always be requested from the datasource backend
 export const MIN_LIVE_LOOKBACK_TIME_MS = 10 * 60 * 1_000; // 10 minutes
@@ -38,7 +39,15 @@ export class SiftDataSourceCache {
 
   // very basic key generation from the query. Any change a user makes will invalidate (including ordering of the queries)
   private generateTargetsKey(request: DataQueryRequest<SiftQuery>): string {
-    return JSON.stringify(request.targets);
+    return JSON.stringify(
+      // perform variable replacement to catch any changes in the panel
+      request.targets.map((target) => {
+        return {
+          ...target,
+          query: replaceTemplateVariablesInQuery(target),
+        };
+      })
+    );
   }
 
   /* queryWithCache pulls data from cache if possible, otherwise fetches from backend.

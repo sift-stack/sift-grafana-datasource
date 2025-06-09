@@ -24,6 +24,7 @@ import {
   DEFAULT_QUERY,
   DEFAULT_RUN_QUERY,
 } from './constants';
+import { getTemplateSrv } from '@grafana/runtime';
 
 export const getValueAndSelectionTypeFromQuery = (
   query: ChannelQuery | RunQuery | AssetQuery | null | undefined
@@ -213,6 +214,80 @@ export const filterQueryBeforeRequest = (query: SiftQuery): SiftQuery => {
   return {
     ...query,
     channelDataQueries: filteredQueries,
+  };
+};
+
+export const replaceTemplateVariablesInQuery = (query: SiftQuery): SiftQuery => {
+  const templateSrv = getTemplateSrv();
+
+  function getValuesForVariable(name: string): string[] {
+    const values: string[] = [];
+    templateSrv.replace(name, {}, (value: string | string[]) => {
+      if (Array.isArray(value)) {
+        values.push(...value);
+      } else {
+        values.push(value);
+      }
+    });
+    return values;
+  }
+
+  return {
+    ...query,
+    channelDataQueries: query.channelDataQueries?.map((cdq) => {
+      return {
+        ...cdq,
+        assetQueries: cdq.assetQueries?.reduce((acc: AssetQuery[], aq: AssetQuery) => {
+          // If we have a dashboard variable, handle it separately
+          if (aq.dashboardVariableName) {
+            const dashboardVarValues = getValuesForVariable(aq.dashboardVariableName);
+            if (dashboardVarValues) {
+              dashboardVarValues.forEach((v) => {
+                acc.push({
+                  assetId: v,
+                  dashboardVariableName: aq.dashboardVariableName,
+                });
+              });
+            }
+          } else {
+            acc.push({
+              ...aq,
+              assetId: templateSrv.replace(aq.assetId || ''),
+              assetName: templateSrv.replace(aq.assetName || ''),
+            });
+          }
+          return acc;
+        }, []),
+        runQueries: cdq.runQueries?.map((rq) => {
+          return {
+            ...rq,
+            runId: templateSrv.replace(rq.runId || ''),
+            runName: templateSrv.replace(rq.runName || ''),
+          };
+        }),
+        channelQueries: cdq.channelQueries?.map((cq) => {
+          return {
+            ...cq,
+            channelId: templateSrv.replace(cq.channelId || ''),
+            channelName: templateSrv.replace(cq.channelName || ''),
+          };
+        }),
+        calculatedChannelQueries: cdq.calculatedChannelQueries?.map((cc) => {
+          return {
+            ...cc,
+            name: templateSrv.replace(cc.name || ''),
+            expression: templateSrv.replace(cc.expression || ''),
+            channelReferences: cc.channelReferences?.map((cr) => {
+              return {
+                ...cr,
+                channelId: templateSrv.replace(cr.channelId || ''),
+                channelName: templateSrv.replace(cr.channelName || ''),
+              };
+            }),
+          };
+        }),
+      };
+    }),
   };
 };
 

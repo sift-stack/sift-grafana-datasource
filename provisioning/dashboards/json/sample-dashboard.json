@@ -383,7 +383,7 @@
                       "channelReference": "$2"
                     }
                   ],
-                  "expression": "$1 / $2",
+                  "expression": "avg($1 / $2, rolling(\"$rollingAvg\"))",
                   "name": "My-Calculation"
                 }
               ],
@@ -572,8 +572,8 @@
   "templating": {
     "list": [
       {
+        "allowCustomValue": false,
         "current": {
-          "selected": false,
           "text": "rover_1",
           "value": "60a0e291-9ce7-4d45-bdea-bb0a2c2afe65"
         },
@@ -594,6 +594,42 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "5s",
+          "value": "5s"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "rollingAvg",
+        "options": [
+          {
+            "selected": true,
+            "text": "5s",
+            "value": "5s"
+          },
+          {
+            "selected": false,
+            "text": "30s",
+            "value": "30s"
+          },
+          {
+            "selected": false,
+            "text": "1m",
+            "value": "1m"
+          },
+          {
+            "selected": false,
+            "text": "5m",
+            "value": "5m"
+          }
+        ],
+        "query": "5s, 30s, 1m, 5m",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },

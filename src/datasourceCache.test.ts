@@ -3,6 +3,13 @@ import { of } from 'rxjs';
 import { SiftDataSourceCache, MIN_LIVE_LOOKBACK_TIME_MS, filterFrameByTimeRange } from './datasourceCache';
 import { SiftQuery } from './types';
 
+// Mock the template service
+jest.mock('@grafana/runtime', () => ({
+  getTemplateSrv: () => ({
+    replace: (str: string) => str, // Simple mock that returns the input string
+  }),
+}));
+
 // Mock the MIN_LIVE_LOOKBACK_TIME_MS constant
 const MOCK_TIME = new Date('2024-01-01T00:00:00.000Z').getTime(); // Fixed timestamp for testing
 const MOCK_TIME_NOW = new Date('2025-01-01T12:30:00.000Z').getTime();
@@ -368,6 +375,99 @@ describe('SiftDataSourceCache', () => {
       // Check that we have the correct number of data points
       const timeField = response.data[0].fields.find((f: Field) => f.name === 'time');
       expect(timeField?.values.length).toBeGreaterThanOrEqual(60); // At least 60 minutes worth of data
+    });
+
+    it('should correctly handle multiple queries with multiple DataFrames', async () => {
+      // Mock fetch callback to return multiple DataFrames for multiple queries
+      mockFetchCallback.mockImplementation((request: DataQueryRequest<SiftQuery>) => {
+        const from = request.range.from.valueOf();
+        const to = request.range.to.valueOf();
+        
+        // Create a DataFrame for each target/query
+        const dataFrames = request.targets.map(target => {
+          return createMockDataFrame(from, to, MINUTE, target.refId, true);
+        });
+
+        const response: DataQueryResponse = {
+          data: dataFrames,
+        };
+
+        return of(response);
+      });
+
+      // Create a request with multiple targets/queries
+      const multiQueryRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+      multiQueryRequest.targets = [
+        {
+          refId: 'A',
+          queryVersion: '2',
+          channelDataQueries: [{ assetQueries: [{ assetId: 'asset1' }] }],
+        },
+        {
+          refId: 'B',
+          queryVersion: '2',
+          channelDataQueries: [{ assetQueries: [{ assetId: 'asset2' }] }],
+        },
+        {
+          refId: 'C',
+          queryVersion: '2',
+          channelDataQueries: [{ assetQueries: [{ assetId: 'asset3' }] }],
+        },
+      ];
+
+      // Initial request for first half of the time range
+      const initialResponse = await cache.queryWithCache(multiQueryRequest, mockFetchCallback);
+      
+      // Verify we got 3 DataFrames in the response
+      expect(initialResponse.data).toHaveLength(3);
+      expect(initialResponse.data[0].refId).toBe('A');
+      expect(initialResponse.data[1].refId).toBe('B');
+      expect(initialResponse.data[2].refId).toBe('C');
+      
+      // Clear the mock to track subsequent calls
+      mockFetchCallback.mockClear();
+      
+      // Now request an expanded time range
+      const expandedRequest = { ...multiQueryRequest };
+      expandedRequest.range = {
+        from: dateTime(MOCK_TIME),
+        to: dateTime(MOCK_TIME + HOUR * 2),
+        raw: {
+          from: dateTime(MOCK_TIME),
+          to: dateTime(MOCK_TIME + HOUR * 2),
+        },
+      };
+      
+      const expandedResponse = await cache.queryWithCache(expandedRequest, mockFetchCallback);
+      
+      // Verify we still got 3 DataFrames in the response after expanding the range
+      expect(expandedResponse.data).toHaveLength(3);
+      expect(expandedResponse.data[0].refId).toBe('A');
+      expect(expandedResponse.data[1].refId).toBe('B');
+      expect(expandedResponse.data[2].refId).toBe('C');
+      
+      // Mock should have been called once to fetch the expanded range
+      expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+      
+      // The fetched request should be for the missing range
+      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
+      expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME + HOUR);
+      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME + HOUR * 2);
+      
+      // Each DataFrame should have data for the full requested range
+      expandedResponse.data.forEach(frame => {
+        const timeField = frame.fields.find((f: Field) => f.type === FieldType.time);
+        if (timeField) {
+          const times = timeField.values;
+          // Check that we have times spanning the full range
+          const minTime = Math.min(...times);
+          const maxTime = Math.max(...times);
+          
+          // Allow for some small rounding errors in the test
+          expect(minTime).toBeCloseTo(MOCK_TIME, -3);
+          expect(maxTime).toBeCloseTo(MOCK_TIME + HOUR * 2, -3);
+        }
+      });
     });
   });
 });

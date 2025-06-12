@@ -78,6 +78,7 @@ export class SiftDataSourceCache {
       // No cache yet or targets/interval changed/data is within min live time → full fetch
       if (
         !cacheEntry || // no cache data
+        cacheEntry.response?.errors || // cache has errors
         currentTargetsKey !== cacheEntry.targetsKey || // targets (query) changed
         newIntervalMs !== cacheEntry.fetchedIntervalMs || // new resolution/sample frequency requested
         liveLookbackTime <= newFrom // all data is liveish
@@ -126,15 +127,17 @@ export class SiftDataSourceCache {
         };
       }
 
-      const cachedFrame: DataFrame = cacheEntry.response.data[0];
+      const cachedFrames: DataFrame[] = cacheEntry.response.data;
 
       // If we're looking at live data, filter out the recent data from the cached frame
-      let trimmedCacheFrame = cachedFrame;
+      let trimmedCacheFrames = cachedFrames;
       if (isLiveishData) {
-        trimmedCacheFrame = filterFrameByTimeRange(cachedFrame, cacheFrom, cacheTo);
+        trimmedCacheFrames = cachedFrames.map((cachedFrame) => {
+          return filterFrameByTimeRange(cachedFrame, cacheFrom, cacheTo);
+        });
       }
 
-      let newFrames: DataFrame[] = [];
+      let newFrames: DataFrame[][] = [];
       // Fire off sub‑queries for each missing range
       await Promise.all(
         fetchRanges.map(async (rng) => {
@@ -148,8 +151,8 @@ export class SiftDataSourceCache {
           };
 
           const subResp = await firstValueFrom(fetchCallback(subReq));
-          if (!subResp.errors && subResp.data[0]) {
-            newFrames.push(subResp.data[0]);
+          if (!subResp.errors && subResp.data.length > 0) {
+            newFrames.push(subResp.data);
           } else {
             console.error(
               `Panel ${panelId} - Failed to fetch data from ${new Date(rng.from).toISOString()} to ${new Date(
@@ -160,14 +163,25 @@ export class SiftDataSourceCache {
         })
       );
 
-      let mergedFrame = trimmedCacheFrame;
-      newFrames.forEach((newFrame) => {
-        mergedFrame = appendFramesByTime(mergedFrame, newFrame);
+      let updatedCacheFrames: DataFrame[] = [];
+      newFrames.forEach((frames) => {
+        frames.forEach((frame) => {
+          const matchingCachedFrame = trimmedCacheFrames.find((cachedFrame) => {
+            return cachedFrame.refId === frame.refId;
+          });
+
+          // If cached frame exists, append to it
+          if (matchingCachedFrame) {
+            updatedCacheFrames.push(appendFramesByTime(matchingCachedFrame, frame));
+          } else {
+            updatedCacheFrames.push(frame);
+          }
+        });
       });
 
-      const filteredFrame = filterFrameByTimeRange(mergedFrame, newFrom, newTo);
+      const filteredFrames = updatedCacheFrames.map((frame) => filterFrameByTimeRange(frame, newFrom, newTo));
 
-      const result: DataQueryResponse = { data: [filteredFrame] };
+      const result: DataQueryResponse = { data: filteredFrames };
 
       // Update cache to this full new range+response
       this.cache.set(panelId, {
@@ -293,6 +307,7 @@ export function appendFramesByTime(cached: DataFrame, fresh: DataFrame): DataFra
   });
 
   return {
+    ...cached,
     fields: mergedFields,
     length: mergedFields[0].values.length,
   };

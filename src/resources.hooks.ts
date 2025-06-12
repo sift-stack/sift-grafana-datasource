@@ -37,10 +37,11 @@ export const useFetchAssets = (
         const response = await datasource.getResource<{
           assets: Asset[];
         }>('assets', { filter: searchTerm ? CELUtil.CaseInsensitiveMatch('name', searchTerm) : '' });
+        assets.push(...(response.assets || []));
 
-        let sortedResponseAssets = response.assets;
+        let sortedResponseAssets = assets;
         if (searchTerm) {
-          sortedResponseAssets = response.assets.sort((a, b) => {
+          sortedResponseAssets = assets.sort((a, b) => {
             const levenA = leven(a.name, searchTerm);
             const levenB = leven(b.name, searchTerm);
             if (levenA === levenB) {
@@ -130,11 +131,12 @@ export const useFetchRuns = (
             ? CELUtil.And(CELUtil.In('asset_id', assetIds), CELUtil.CaseInsensitiveMatch('name', searchTerm))
             : CELUtil.In('asset_id', assetIds),
         });
+        runs.push(...(response.runs || []));
 
-        let sortedResponseRuns = response.runs;
+        let sortedResponseRuns = runs;
         if (searchTerm) {
           // Sort by similarity to search term
-          sortedResponseRuns = sortedResponseRuns.sort((a, b) => {
+          sortedResponseRuns = runs.sort((a, b) => {
             const levenA = leven(a.name, searchTerm);
             const levenB = leven(b.name, searchTerm);
             if (levenA === levenB) {
@@ -146,7 +148,7 @@ export const useFetchRuns = (
           });
         } else {
           // Default sort by start time
-          sortedResponseRuns = sortedResponseRuns.sort((a, b) => {
+          sortedResponseRuns = runs.sort((a, b) => {
             const aTime = new Date(a.startTime);
             const bTime = new Date(b.startTime);
             return bTime.getTime() - aTime.getTime();

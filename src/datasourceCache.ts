@@ -133,7 +133,7 @@ export class SiftDataSourceCache {
       let trimmedCacheFrames = cachedFrames;
       if (isLiveishData) {
         trimmedCacheFrames = cachedFrames.map((cachedFrame) => {
-          return filterFrameByTimeRange(cachedFrame, liveLookbackTime, oldTo);
+          return filterFrameByTimeRange(cachedFrame, cacheFrom, cacheTo);
         });
       }
 

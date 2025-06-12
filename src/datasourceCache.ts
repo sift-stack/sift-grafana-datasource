@@ -44,7 +44,7 @@ export class SiftDataSourceCache {
       request.targets.map((target) => {
         return {
           ...target,
-          query: replaceTemplateVariablesInQuery(target),
+          query: replaceTemplateVariablesInQuery(target, request.scopedVars),
         };
       })
     );

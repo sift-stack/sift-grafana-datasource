@@ -51,6 +51,6 @@ export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSou
   applyTemplateVariables(query: SiftQuery, scopedVars: ScopedVars): SiftQuery {
     // First filter any queries that aren't fully defined
     const filteredQuery = filterQueryBeforeRequest(query);
-    return replaceTemplateVariablesInQuery(filteredQuery);
+    return replaceTemplateVariablesInQuery(filteredQuery, scopedVars);
   }
 }

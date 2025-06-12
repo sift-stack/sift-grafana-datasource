@@ -14,7 +14,7 @@ import {
 } from './types';
 import { SelectableInputType, SelectableInputTypes } from './components/input/InputTypeSelect';
 import { DateTime, Duration } from 'luxon';
-import { SelectableValue } from '@grafana/data';
+import { ScopedVars, SelectableValue } from '@grafana/data';
 import {
   DEFAULT_ASSET_QUERY,
   DEFAULT_CALCULATED_CHANNEL_DATA_QUERY,
@@ -217,12 +217,12 @@ export const filterQueryBeforeRequest = (query: SiftQuery): SiftQuery => {
   };
 };
 
-export const replaceTemplateVariablesInQuery = (query: SiftQuery): SiftQuery => {
+export const replaceTemplateVariablesInQuery = (query: SiftQuery, scopedVars: ScopedVars): SiftQuery => {
   const templateSrv = getTemplateSrv();
 
-  function getValuesForVariable(name: string): string[] {
+  function getValuesForVariable(name: string, scopedVars: ScopedVars): string[] {
     const values: string[] = [];
-    templateSrv.replace(name, {}, (value: string | string[]) => {
+    templateSrv.replace(name, scopedVars, (value: string | string[]) => {
       if (Array.isArray(value)) {
         values.push(...value);
       } else {
@@ -240,7 +240,7 @@ export const replaceTemplateVariablesInQuery = (query: SiftQuery): SiftQuery => 
         assetQueries: cdq.assetQueries?.reduce((acc: AssetQuery[], aq: AssetQuery) => {
           // If we have a dashboard variable, handle it separately
           if (aq.dashboardVariableName) {
-            const dashboardVarValues = getValuesForVariable(aq.dashboardVariableName);
+            const dashboardVarValues = getValuesForVariable(aq.dashboardVariableName, scopedVars);
             if (dashboardVarValues) {
               dashboardVarValues.forEach((v) => {
                 acc.push({
@@ -252,8 +252,8 @@ export const replaceTemplateVariablesInQuery = (query: SiftQuery): SiftQuery => 
           } else {
             acc.push({
               ...aq,
-              assetId: templateSrv.replace(aq.assetId || ''),
-              assetName: templateSrv.replace(aq.assetName || ''),
+              assetId: templateSrv.replace(aq.assetId || '', scopedVars),
+              assetName: templateSrv.replace(aq.assetName || '', scopedVars),
             });
           }
           return acc;
@@ -261,27 +261,27 @@ export const replaceTemplateVariablesInQuery = (query: SiftQuery): SiftQuery => 
         runQueries: cdq.runQueries?.map((rq) => {
           return {
             ...rq,
-            runId: templateSrv.replace(rq.runId || ''),
-            runName: templateSrv.replace(rq.runName || ''),
+            runId: templateSrv.replace(rq.runId || '', scopedVars),
+            runName: templateSrv.replace(rq.runName || '', scopedVars),
           };
         }),
         channelQueries: cdq.channelQueries?.map((cq) => {
           return {
             ...cq,
-            channelId: templateSrv.replace(cq.channelId || ''),
-            channelName: templateSrv.replace(cq.channelName || ''),
+            channelId: templateSrv.replace(cq.channelId || '', scopedVars),
+            channelName: templateSrv.replace(cq.channelName || '', scopedVars),
           };
         }),
         calculatedChannelQueries: cdq.calculatedChannelQueries?.map((cc) => {
           return {
             ...cc,
-            name: templateSrv.replace(cc.name || ''),
-            expression: templateSrv.replace(cc.expression || ''),
+            name: templateSrv.replace(cc.name || '', scopedVars),
+            expression: templateSrv.replace(cc.expression || '', scopedVars),
             channelReferences: cc.channelReferences?.map((cr) => {
               return {
                 ...cr,
-                channelId: templateSrv.replace(cr.channelId || ''),
-                channelName: templateSrv.replace(cr.channelName || ''),
+                channelId: templateSrv.replace(cr.channelId || '', scopedVars),
+                channelName: templateSrv.replace(cr.channelName || '', scopedVars),
               };
             }),
           };

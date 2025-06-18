@@ -23,4 +23,3 @@ jobs:
         with:
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           attestation: true
-          use_changelog_generator: true # Enable automatic changelog generation

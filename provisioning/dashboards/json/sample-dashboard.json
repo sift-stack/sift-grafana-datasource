@@ -588,7 +588,7 @@
         "multi": false,
         "name": "assetQuery",
         "options": [],
-        "query": "",
+        "query": {},
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

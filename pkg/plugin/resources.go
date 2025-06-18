@@ -31,7 +31,7 @@ func (d *SiftDatasource) callResourceAssets(ctx context.Context, req *backend.Ca
 		params.Set("paginationSearchParams.limit", strconv.Itoa(ResourceLimit))
 	}
 
-	assets, err := handlePaginatedRequest[Asset](apiRequest{
+	assets, err := handlePaginatedRequest[Asset](d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v1/assets",
@@ -67,7 +67,7 @@ func (d *SiftDatasource) callResourceRuns(ctx context.Context, req *backend.Call
 		return err
 	}
 
-	runs, err := handlePaginatedRequest[Run](apiRequest{
+	runs, err := handlePaginatedRequest[Run](d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v2/runs",
@@ -107,7 +107,7 @@ func (d *SiftDatasource) callResourceChannels(ctx context.Context, req *backend.
 
 	params.Set("page_size", strconv.Itoa(ResourceLimit))
 
-	channels, err := handlePaginatedRequest[Channel](apiRequest{
+	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v1/channels:search", // internal API endpoint used here for improved regex search performance

@@ -1,5 +1,5 @@
 import React, { ChangeEvent } from 'react';
-import { InlineField, Input, SecretInput } from '@grafana/ui';
+import { InlineField, Input, SecretInput, Stack } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { SiftDataSourceOptions, SiftSecureJsonData } from '../legacyTypes';
 
@@ -44,11 +44,19 @@ export function ConfigEditor(props: Props) {
   const secureJsonData = (options.secureJsonData || {}) as SiftSecureJsonData;
 
   return (
-    <div className="gf-form-group">
-      <InlineField label="API Url" labelWidth={12}>
-        <Input onChange={onUrlChange} value={jsonData.url || ''} placeholder="Sift HTTP API Url" width={40} />
+    <Stack direction="column">
+      <InlineField
+        label="API REST URL"
+        labelWidth={16}
+        tooltip="This can be found on the 'Sift > Manage > API Keys' page."
+      >
+        <Input onChange={onUrlChange} value={jsonData.url || ''} placeholder="Sift REST API URL" width={40} />
       </InlineField>
-      <InlineField label="API Key" labelWidth={12}>
+      <InlineField
+        label="API Key"
+        labelWidth={16}
+        tooltip="This can be generated on the 'Sift > Manage > API Keys' page."
+      >
         <SecretInput
           isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
           value={secureJsonData.apiKey || ''}
@@ -58,6 +66,6 @@ export function ConfigEditor(props: Props) {
           onChange={onAPIKeyChange}
         />
       </InlineField>
-    </div>
+    </Stack>
   );
 }

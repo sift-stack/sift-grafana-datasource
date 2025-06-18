@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
@@ -66,7 +67,17 @@ func (c channelCacheKey) String() string {
 }
 
 // NewSiftDatasource creates a new datasource instance.
-func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	// Initialize http client
+	opts, err := s.HTTPClientOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := httpclient.New(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	// Cache logic - ID and Name caches can be long-lived since any misses will result in call to the API
 	// Regex caches are shorter since any newly added Assets/Runs/Channels won't be matched unless a new API call is made
 	assetsIdsCache := NewTypedCache[string, string](cacheTimeToLiveMax, cachePurgeTime)
@@ -79,6 +90,7 @@ func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) 
 	channelNameCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	channelRegexCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	return &SiftDatasource{
+		httpClient:               httpClient,
 		assetsIdSearchCache:      assetsIdsCache,
 		assetsRegexSearchCache:   assetsRegexCache,
 		assetsNameSearchCache:    assetsNameCache,
@@ -94,6 +106,7 @@ func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) 
 // SiftDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 type SiftDatasource struct {
+	httpClient               *http.Client
 	assetsIdSearchCache      *TypedCache[string, string]
 	assetsNameSearchCache    *TypedCache[string, string] // assets are unique by name
 	assetsRegexSearchCache   *TypedCache[string, []string]
@@ -383,7 +396,7 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 	afterTransformingData := time.Now()
 
 	// output timings
-	log.DefaultLogger.Info("timings",
+	log.DefaultLogger.Debug("timings",
 		"loadingQueries", afterLoadingQueries.Sub(queryStart).Milliseconds(),
 		"gettingData", afterExecutingQueries.Sub(afterLoadingQueries).Milliseconds(),
 		"generatingDataFrame", afterTransformingData.Sub(afterExecutingQueries).Milliseconds(),
@@ -981,7 +994,7 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 			channelReferencesMap[assetId] = make(map[string][]expressionChannelReference)
 			for _, channelRef := range calcChannelQuery.ChannelReferences {
 				channelReferencesMap[assetId][channelRef.ChannelReference] = []expressionChannelReference{}
-				log.DefaultLogger.Info("Processing calculated channel reference", "assetId", assetId, "calculatedChannel", calcChannelQuery.Name, "channelReference", channelRef.ChannelReference, "channelId", channelRef.ChannelId, "channelName", channelRef.ChannelName)
+				log.DefaultLogger.Debug("Processing calculated channel reference", "assetId", assetId, "calculatedChannel", calcChannelQuery.Name, "channelReference", channelRef.ChannelReference, "channelId", channelRef.ChannelId, "channelName", channelRef.ChannelName)
 				if channelRef.ChannelId != "" {
 					var results []Channel
 					var err error

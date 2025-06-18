@@ -91,6 +91,7 @@ func (s *DatasourceTestSuite) SetupSuite() {
 	channelNameCache := NewTypedCache[string, []Channel](0, 0)
 
 	s.datasource = &SiftDatasource{
+		httpClient:               s.server.Client(),
 		assetsIdSearchCache:      assetsIdsCache,
 		assetsNameSearchCache:    assetsNameCache,
 		assetsRegexSearchCache:   assetsRegexCache,

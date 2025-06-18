@@ -80,7 +80,7 @@ func convertQueryIfNeeded(q json.RawMessage) (*queryModel, error) {
 
 // convertQuery parses a given DataQuery and migrates it if necessary.
 func convertQuery(orig json.RawMessage) (*queryModel, error) {
-	log.DefaultLogger.Info("migrating query", "query", orig)
+	log.DefaultLogger.Debug("migrating query", "query", orig)
 
 	input := &legacyQueryModel{}
 	err := json.Unmarshal(orig, input)
@@ -226,7 +226,7 @@ func convertQuery(orig json.RawMessage) (*queryModel, error) {
 
 		migratedInput.ChannelDataQueries = append(migratedInput.ChannelDataQueries, cdq)
 	}
-	log.DefaultLogger.Info("migrated query", "query", migratedInput)
+	log.DefaultLogger.Debug("migrated query", "query", migratedInput)
 	return migratedInput, nil
 }
 

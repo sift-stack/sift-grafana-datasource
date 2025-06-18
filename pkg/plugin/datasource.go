@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
@@ -66,7 +67,17 @@ func (c channelCacheKey) String() string {
 }
 
 // NewSiftDatasource creates a new datasource instance.
-func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	// Initialize http client
+	opts, err := s.HTTPClientOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := httpclient.New(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	// Cache logic - ID and Name caches can be long-lived since any misses will result in call to the API
 	// Regex caches are shorter since any newly added Assets/Runs/Channels won't be matched unless a new API call is made
 	assetsIdsCache := NewTypedCache[string, string](cacheTimeToLiveMax, cachePurgeTime)
@@ -79,6 +90,7 @@ func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) 
 	channelNameCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	channelRegexCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	return &SiftDatasource{
+		httpClient:               httpClient,
 		assetsIdSearchCache:      assetsIdsCache,
 		assetsRegexSearchCache:   assetsRegexCache,
 		assetsNameSearchCache:    assetsNameCache,
@@ -94,6 +106,7 @@ func NewSiftDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) 
 // SiftDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 type SiftDatasource struct {
+	httpClient               *http.Client
 	assetsIdSearchCache      *TypedCache[string, string]
 	assetsNameSearchCache    *TypedCache[string, string] // assets are unique by name
 	assetsRegexSearchCache   *TypedCache[string, []string]

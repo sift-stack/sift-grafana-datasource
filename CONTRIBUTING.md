@@ -61,9 +61,7 @@ npm run lint
 npm run lint:fix
 
 # Backend linter
-mage lint
-# or
-golangci-lint run
+npm run lint:backend
 ```
 
 4. Local testing with Grafana:

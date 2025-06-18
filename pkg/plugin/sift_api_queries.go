@@ -300,7 +300,7 @@ func (d *SiftDatasource) getValidAssetsById(pCtx backend.PluginContext, assetIds
 
 	validAssetIds = append(validAssetIds, cachedAssetIds...)
 
-	log.DefaultLogger.Info("getValidAssetsById", "duration", time.Since(startTime).Milliseconds(), "validAssetIds", validAssetIds)
+	log.DefaultLogger.Debug("getValidAssetsById", "duration", time.Since(startTime).Milliseconds(), "validAssetIds", validAssetIds)
 	return validAssetIds, nil
 }
 
@@ -364,7 +364,7 @@ func (d *SiftDatasource) getAssetIdsByName(pCtx backend.PluginContext, assetName
 		d.assetsNameSearchCache.Set(assetName, assetIds[0])
 	}
 
-	log.DefaultLogger.Info("getAssetIdsByName", "duration", time.Since(startTime).Milliseconds(), "search", assetName, "asRegex", asRegex, "assetIds", assetIds)
+	log.DefaultLogger.Debug("getAssetIdsByName", "duration", time.Since(startTime).Milliseconds(), "search", assetName, "asRegex", asRegex, "assetIds", assetIds)
 	return assetIds, nil
 }
 
@@ -420,7 +420,7 @@ func (d *SiftDatasource) getValidRunsById(pCtx backend.PluginContext, runIdOrCli
 
 	validRunIds = append(validRunIds, cachedRunIds...)
 
-	log.DefaultLogger.Info("getValidRunsById", "duration", time.Since(startTime).Milliseconds(), "validRunIds", validRunIds)
+	log.DefaultLogger.Debug("getValidRunsById", "duration", time.Since(startTime).Milliseconds(), "validRunIds", validRunIds)
 	return validRunIds, nil
 }
 
@@ -480,7 +480,7 @@ func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []
 		d.runsNameSearchCache.Set(runName, runIds)
 	}
 
-	log.DefaultLogger.Info("getRunIdsByName", "duration", time.Since(startTime).Milliseconds(), "assetIds", assetIds, "search", runName, "asRegex", asRegex, "runIds", runIds)
+	log.DefaultLogger.Debug("getRunIdsByName", "duration", time.Since(startTime).Milliseconds(), "assetIds", assetIds, "search", runName, "asRegex", asRegex, "runIds", runIds)
 	return runIds, nil
 }
 
@@ -534,7 +534,7 @@ func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds 
 
 	channels = append(channels, cachedChannels...)
 
-	log.DefaultLogger.Info("getChannelsById", "duration", time.Since(startTime).Milliseconds(), "channelIds", channelIds)
+	log.DefaultLogger.Debug("getChannelsById", "duration", time.Since(startTime).Milliseconds(), "channelIds", channelIds)
 	return channels, nil
 }
 
@@ -593,7 +593,7 @@ func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId s
 		d.channelsNameSearchCache.Set(cacheKey.String(), channels)
 	}
 
-	log.DefaultLogger.Info("getChannelsByName", "duration", time.Since(startTime).Milliseconds(), "search", channelName, "assetId", assetId, "asRegex", asRegex, "noOfChannels", len(channels))
+	log.DefaultLogger.Debug("getChannelsByName", "duration", time.Since(startTime).Milliseconds(), "search", channelName, "assetId", assetId, "asRegex", asRegex, "noOfChannels", len(channels))
 	return channels, nil
 }
 
@@ -625,7 +625,7 @@ func (d *SiftDatasource) getChannelsAndSameNameChannelsById(pCtx backend.PluginC
 		allChannels = append(allChannels, resultChannels...)
 	}
 
-	log.DefaultLogger.Info("getChannelsAndSameNameChannelsById", "duration", time.Since(startTime).Milliseconds(), "noOfChannels", len(allChannels))
+	log.DefaultLogger.Debug("getChannelsAndSameNameChannelsById", "duration", time.Since(startTime).Milliseconds(), "noOfChannels", len(allChannels))
 
 	return allChannels, nil
 }

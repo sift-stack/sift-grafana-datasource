@@ -396,7 +396,7 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 	afterTransformingData := time.Now()
 
 	// output timings
-	log.DefaultLogger.Info("timings",
+	log.DefaultLogger.Debug("timings",
 		"loadingQueries", afterLoadingQueries.Sub(queryStart).Milliseconds(),
 		"gettingData", afterExecutingQueries.Sub(afterLoadingQueries).Milliseconds(),
 		"generatingDataFrame", afterTransformingData.Sub(afterExecutingQueries).Milliseconds(),
@@ -994,7 +994,7 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 			channelReferencesMap[assetId] = make(map[string][]expressionChannelReference)
 			for _, channelRef := range calcChannelQuery.ChannelReferences {
 				channelReferencesMap[assetId][channelRef.ChannelReference] = []expressionChannelReference{}
-				log.DefaultLogger.Info("Processing calculated channel reference", "assetId", assetId, "calculatedChannel", calcChannelQuery.Name, "channelReference", channelRef.ChannelReference, "channelId", channelRef.ChannelId, "channelName", channelRef.ChannelName)
+				log.DefaultLogger.Debug("Processing calculated channel reference", "assetId", assetId, "calculatedChannel", calcChannelQuery.Name, "channelReference", channelRef.ChannelReference, "channelId", channelRef.ChannelId, "channelName", channelRef.ChannelName)
 				if channelRef.ChannelId != "" {
 					var results []Channel
 					var err error

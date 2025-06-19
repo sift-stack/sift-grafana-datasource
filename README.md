@@ -8,9 +8,9 @@
 
 This is a Grafana datasource plugin for [Sift](https://www.siftstack.com/). It allows you to query Sift for data and visualize it in Grafana dashboards. The plugin supports both simple channel queries and calculated channel expressions.
 
-<img alt="Grafana Query Screenshot - Channel Query" src=" https://raw.githubusercontent.com/sift-stack/sift-grafana-datasource/main/src/img/channel-query.png" width="400">
+<img alt="Grafana Query Screenshot - Channel Query" src="https://raw.githubusercontent.com/sift-stack/sift-grafana-datasource/main/src/img/channel-query.png" width="400">
 
-<img alt="Grafana Query Screenshot - Calculated Channel Query" src=" https://raw.githubusercontent.com/sift-stack/sift-grafana-datasource/main/src/img/calculated-query.png" width="400">
+<img alt="Grafana Query Screenshot - Calculated Channel Query" src="https://raw.githubusercontent.com/sift-stack/sift-grafana-datasource/main/src/img/calculated-query.png" width="400">
 
 ## Compatibility
 

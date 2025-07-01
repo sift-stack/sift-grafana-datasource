@@ -1,11 +1,11 @@
-import { DataSourceInstanceSettings, CoreApp, ScopedVars, DataQueryResponse, DataQueryRequest } from '@grafana/data';
-import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
-import { SiftQuery, SiftDataSourceOptions, DEFAULT_QUERY, AssetQuery, AssetGrafanaVariable } from './types';
-import { SiftVariableSupport } from 'variables';
-import { filterQueryBeforeRequest, replaceTemplateVariablesInQuery } from './utils';
+import { CoreApp, DataQueryRequest, DataQueryResponse, DataSourceInstanceSettings, ScopedVars } from '@grafana/data';
+import { DataSourceWithBackend } from '@grafana/runtime';
 import { Observable, from } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
+import { SiftVariableSupport } from 'variables';
 import { SiftDataSourceCache } from './datasourceCache';
+import { DEFAULT_QUERY, SiftDataSourceOptions, SiftQuery } from './types';
+import { ensureQueryDefaults, filterQueryBeforeRequest, replaceTemplateVariablesInQuery } from './utils';
 
 export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSourceOptions> {
   cache: SiftDataSourceCache;
@@ -41,11 +41,15 @@ export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSou
   }
 
   async migrateQuery(query: Partial<SiftQuery>): Promise<SiftQuery> {
+    // Ensure required fields are present
+    const queryWithDefaults = ensureQueryDefaults(query);
+
     if ('queries' in query || 'calculatedChannelQuery' in query) {
-      const result = await this.postResource<SiftQuery>('migrate-query', query);
+      const result = await this.postResource<SiftQuery>('migrate-query', queryWithDefaults);
       return { ...result, refId: query.refId || '' };
     }
-    return query as SiftQuery;
+
+    return queryWithDefaults as SiftQuery;
   }
 
   applyTemplateVariables(query: SiftQuery, scopedVars: ScopedVars): SiftQuery {

@@ -1,10 +1,11 @@
-import React, { useEffect, useCallback, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { RadioButtonGroup, InlineFieldRow, InlineField, Checkbox, InlineLabel, IconButton } from '@grafana/ui';
-import { Section } from './common/Section';
 import { QueryEditorProps } from '@grafana/data';
+import { Checkbox, IconButton, InlineField, InlineFieldRow, InlineLabel, RadioButtonGroup } from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
-import { ChannelDataQuery, SiftDataSourceOptions, SiftQuery, QueryTypes, QueryType } from '../types';
+import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQuery } from '../types';
+import { ensureQueryDefaults } from '../utils';
+import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
@@ -62,7 +63,11 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const onUpdateChannelDataQueries = useCallback(
     (channelDataQueries: ChannelDataQuery[]) => {
       const latestQuery = queryRef.current;
-      onUpdateQuery({ ...latestQuery, channelDataQueries });
+      const updatedQuery = ensureQueryDefaults({
+        ...latestQuery,
+        channelDataQueries,
+      });
+      onUpdateQuery(updatedQuery as SiftQuery);
     },
     [onUpdateQuery]
   );

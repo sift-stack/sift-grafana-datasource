@@ -1,30 +1,28 @@
-import {
-  AssetQuery,
-  ChannelQuery,
-  RunQuery,
-  Asset,
-  Run,
-  Channel,
-  ChannelDataQuery,
-  QueryTypes,
-  QueryType,
-  CalculatedChannelDataQuery,
-  SiftQuery,
-  AssetGrafanaVariable,
-} from './types';
-import { SelectableInputType, SelectableInputTypes } from './components/input/InputTypeSelect';
-import { DateTime, Duration } from 'luxon';
 import { ScopedVars, SelectableValue } from '@grafana/data';
+import { getTemplateSrv } from '@grafana/runtime';
+import { DateTime, Duration } from 'luxon';
+import { SelectableInputType, SelectableInputTypes } from './components/input/InputTypeSelect';
 import {
   DEFAULT_ASSET_QUERY,
   DEFAULT_CALCULATED_CHANNEL_DATA_QUERY,
-  DEFAULT_CALCULATED_CHANNEL_QUERY,
   DEFAULT_CHANNEL_DATA_QUERY,
   DEFAULT_CHANNEL_QUERY,
-  DEFAULT_QUERY,
-  DEFAULT_RUN_QUERY,
+  DEFAULT_RUN_QUERY
 } from './constants';
-import { getTemplateSrv } from '@grafana/runtime';
+import {
+  Asset,
+  AssetGrafanaVariable,
+  AssetQuery,
+  Channel,
+  ChannelDataQuery,
+  ChannelQuery,
+  DEFAULT_QUERY,
+  QueryType,
+  QueryTypes,
+  Run,
+  RunQuery,
+  SiftQuery
+} from './types';
 
 export const getValueAndSelectionTypeFromQuery = (
   query: ChannelQuery | RunQuery | AssetQuery | null | undefined
@@ -459,4 +457,14 @@ export class CELUtil {
 
 export const regexEscape = (regex: string, forCel = false, excludeGrafanaVarChars = false): string => {
   return regex.replace(excludeGrafanaVarChars ? /[.*+?^()|[\]\\]/g : /[.*+?^${}()|[\]\\]/g, forCel ? '\\\\$&' : '\\$&');
+};
+
+/**
+ * Ensures that a SiftQuery has all required fields with proper defaults
+ */
+export const ensureQueryDefaults = (query: Partial<SiftQuery>): Partial<SiftQuery> => {
+  return {
+    ...DEFAULT_QUERY,
+    ...query,
+  };
 };

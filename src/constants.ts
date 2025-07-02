@@ -1,10 +1,9 @@
 import {
   AssetQuery,
+  CalculatedChannelDataQuery,
   ChannelDataQuery,
   ChannelQuery,
-  RunQuery,
-  CalculatedChannelDataQuery,
-  ChannelReferenceQuery,
+  RunQuery
 } from './types';
 
 export const DEFAULT_ASSET_QUERY: AssetQuery = { asSelect: true };

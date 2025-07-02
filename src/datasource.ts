@@ -45,7 +45,7 @@ export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSou
     const queryWithDefaults = ensureQueryDefaults(query);
 
     if ('queries' in query || 'calculatedChannelQuery' in query) {
-      const result = await this.postResource<SiftQuery>('migrate-query', queryWithDefaults);
+      const result = await this.postResource<SiftQuery>('migrate-query', query);
       return { ...result, refId: query.refId || '' };
     }
 

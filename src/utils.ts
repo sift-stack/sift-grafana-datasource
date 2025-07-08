@@ -216,6 +216,7 @@ export const filterQueryBeforeRequest = (query: SiftQuery): SiftQuery => {
 };
 
 export const replaceTemplateVariablesInQuery = (query: SiftQuery, scopedVars: ScopedVars): SiftQuery => {
+  console.log('[SIFT-QUERY] replaceTemplateVariablesInQuery', query, scopedVars);
   const templateSrv = getTemplateSrv();
 
   function getValuesForVariable(name: string, scopedVars: ScopedVars): string[] {
@@ -246,6 +247,7 @@ export const replaceTemplateVariablesInQuery = (query: SiftQuery, scopedVars: Sc
                   dashboardVariableName: aq.dashboardVariableName,
                 });
               });
+              console.log('[SIFT-QUERY] dashboardVarValues', dashboardVarValues);
             }
           } else {
             acc.push({

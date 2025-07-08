@@ -3,7 +3,6 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/useragent"
 	"math"
 	"math/rand"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/useragent"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )

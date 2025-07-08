@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"net/http"
 	"net/url"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
@@ -894,13 +894,8 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 	channelIdQueries := []string{}
 	channelIdFromSelectQueries := []string{} // asSelect also redupes channels with the same name
 	for _, channelQuery := range cdq.ChannelQueries {
-		if channelQuery.ChannelId != "" {
-			if channelQuery.AsSelect {
-				channelIdFromSelectQueries = append(channelIdFromSelectQueries, channelQuery.ChannelId)
-			} else {
-				channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
-			}
-		} else if channelQuery.ChannelName != "" {
+		channelInCache, _ := d.isChannelInCache(channelQuery.ChannelId, assetIds)
+		if channelQuery.ChannelName != "" || !channelInCache {
 			// If we have a channel name, search for matching channels for each asset
 			channelSearches := make([]channelSearchKey, 0)
 			for _, assetId := range assetIds {
@@ -922,10 +917,18 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 					}
 				}
 			}
+		} else if channelQuery.ChannelId != "" {
+			if channelQuery.AsSelect {
+				channelIdFromSelectQueries = append(channelIdFromSelectQueries, channelQuery.ChannelId)
+			} else {
+				channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
+			}
 		}
+
 	}
 	// Find all channels with same name from select
-	channelsFromSelect, err := d.getChannelsAndSameNameChannelsById(pCtx, channelIdFromSelectQueries)
+	channelsFromSelect, err := d.getChannelsAndSameNameChannelsById(pCtx, channelIdFromSelectQueries, assetIds)
+
 	if err != nil {
 		return nil, fmt.Errorf("error looking up channels: %w", err)
 	}
@@ -933,7 +936,8 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 		channelIds = append(channelIds, channel.ChannelId)
 	}
 
-	results, err := d.getChannelsById(pCtx, channelIdQueries)
+	results, err := d.getChannelsById(pCtx, channelIdQueries, assetIds)
+
 	if err != nil {
 		return nil, fmt.Errorf("error looking up channels: %w", err)
 	}
@@ -999,9 +1003,9 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 					var results []Channel
 					var err error
 					if channelRef.AsSelect {
-						results, err = d.getChannelsAndSameNameChannelsById(pCtx, []string{channelRef.ChannelId})
+						results, err = d.getChannelsAndSameNameChannelsById(pCtx, []string{channelRef.ChannelId}, assetIds)
 					} else {
-						results, err = d.getChannelsById(pCtx, []string{channelRef.ChannelId})
+						results, err = d.getChannelsById(pCtx, []string{channelRef.ChannelId}, assetIds)
 					}
 					if err != nil {
 						return nil, nil, fmt.Errorf("error looking up channels: %w", err)

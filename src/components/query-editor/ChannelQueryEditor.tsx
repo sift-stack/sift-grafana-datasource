@@ -1,15 +1,15 @@
-import { SelectableValue } from '@grafana/data';
-import { InlineLabel, useStyles2 } from '@grafana/ui';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { SiftDataSource } from '../../datasource';
-import { useFetchChannels } from '../../resources.hooks';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { ChannelQuery, ChannelQueryId, QueryType, QueryTypes } from '../../types';
-import { channelQueryFromSelection, channelToSelectableValue, getValueAndSelectionTypeFromQuery } from '../../utils';
-import { getStyles } from '../common/Common.style';
-import { AddButton, RemoveButton } from '../common/InlineButton';
+import { SiftDataSource } from '../../datasource';
 import { Section } from '../common/Section';
-import { SelectableInputType, SelectableInputTypes } from '../input/InputTypeSelect';
+import { InlineLabel, useStyles2 } from '@grafana/ui';
 import { SelectableTypeInput } from '../input/SelectableTypeInput';
+import { AddButton, RemoveButton } from '../common/InlineButton';
+import { getStyles } from '../common/Common.style';
+import { getValueAndSelectionTypeFromQuery, channelQueryFromSelection, channelToSelectableValue } from '../../utils';
+import { SelectableInputTypes, SelectableInputType, SelectableInputTypeValue } from '../input/InputTypeSelect';
+import { useFetchChannels } from '../../resources.hooks';
+import { SelectableValue } from '@grafana/data';
 
 interface Props {
   datasource: SiftDataSource;
@@ -91,6 +91,19 @@ export const ChannelQueryEditor = ({
       void loadChannels(selectedAssetIds, undefined, selectedChannelIds || undefined);
     }
   }, [selectedChannelType, selectedAssetIds, selectedChannelIds, loadChannels]);
+
+  // If selected AssetIds change, need to update selection
+  const selectedAssetIdsRef = useRef<string[]>(selectedAssetIds);
+  const lastSelectedAssetIdsRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (selectedAssetIdsRef.current !== selectedAssetIds) {
+      lastSelectedAssetIdsRef.current = selectedAssetIdsRef.current;
+      selectedAssetIdsRef.current = selectedAssetIds;
+      if (selectedChannelType === SelectableInputTypes.SELECT) {
+        setSelectedChannelValue('');
+      }
+    }
+  }, [selectedAssetIds, selectedChannelType]);
 
   const channelSelectableTypes = useMemo(
     () => [

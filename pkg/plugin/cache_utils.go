@@ -74,34 +74,37 @@ func (tc *TypedCache[K, V]) getRandomizedTimeToLive() time.Duration {
 	return time.Duration(rand.Intn(int(tc.maxTtl-tc.minTtl))) + tc.minTtl
 }
 
-type loaderFunc[K comparable, V any] func(context.Context, K) (V, error)
+type loaderFunc[K any, V any] func(context.Context, K) (V, error)
 
-type TypedCacheWithLoader[K comparable, V any] struct {
-	*TypedCache[K, V]
-	mu      *sync.Mutex
-	loading map[K]func() (V, error)
-	loader  loaderFunc[K, V]
+type TypedCacheWithLoader[K any, V any, C comparable] struct {
+	*TypedCache[C, V]
+	mu              *sync.Mutex
+	keyToComparable func(K) C
+	loading         map[C]func() (V, error)
+	loader          loaderFunc[K, V]
 }
 
-func NewTypedCacheWithLoader[K comparable, V any](typedCache *TypedCache[K, V], loader loaderFunc[K, V]) *TypedCacheWithLoader[K, V] {
-	return &TypedCacheWithLoader[K, V]{
-		TypedCache: typedCache,
-		mu:         &sync.Mutex{},
-		loading:    make(map[K]func() (V, error)),
-		loader:     loader,
+func NewTypedCacheWithLoader[K comparable, V any, C comparable](typedCache *TypedCache[C, V], loader loaderFunc[K, V], keyToComparable func(K) C) *TypedCacheWithLoader[K, V, C] {
+	return &TypedCacheWithLoader[K, V, C]{
+		TypedCache:      typedCache,
+		mu:              &sync.Mutex{},
+		keyToComparable: keyToComparable,
+		loading:         make(map[C]func() (V, error)),
+		loader:          loader,
 	}
 }
 
 // GetOrWait retrieves an item from the cache and waits on any other goroutine that is setting the value
-func (tc *TypedCacheWithLoader[K, V]) GetOrWait(ctx context.Context, key K) (V, error) {
+func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(ctx context.Context, key K) (V, error) {
 	tc.mu.Lock()
-	value, found := tc.cache.Get(fmt.Sprintf("%v", key))
+	comparableKey := tc.keyToComparable(key)
+	value, found := tc.cache.Get(fmt.Sprintf("%v", comparableKey))
 	if found {
 		return value, nil
 	}
 
 	// Check if we are already loading the value
-	load := tc.loading[key]
+	load := tc.loading[comparableKey]
 	if load != nil {
 		tc.mu.Unlock()
 		return load()
@@ -113,14 +116,14 @@ func (tc *TypedCacheWithLoader[K, V]) GetOrWait(ctx context.Context, key K) (V, 
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 
-		delete(tc.loading, key)
+		delete(tc.loading, comparableKey)
 		if err != nil {
 			return v, err
 		}
-		tc.Set(key, v)
+		tc.Set(comparableKey, v)
 		return v, nil
 	})
-	tc.loading[key] = load
+	tc.loading[comparableKey] = load
 	tc.mu.Unlock()
 	return load()
 

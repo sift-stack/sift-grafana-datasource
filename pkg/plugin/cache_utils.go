@@ -1,11 +1,12 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
-	"math/rand"
-	"time"
-
 	"github.com/patrickmn/go-cache"
+	"math/rand"
+	"sync"
+	"time"
 )
 
 // TypedCache is a type-safe wrapper around go-cache
@@ -71,4 +72,56 @@ func (tc *TypedCache[K, V]) getRandomizedTimeToLive() time.Duration {
 		return tc.minTtl
 	}
 	return time.Duration(rand.Intn(int(tc.maxTtl-tc.minTtl))) + tc.minTtl
+}
+
+type loaderFunc[K comparable, V any] func(context.Context, K) (V, error)
+
+type TypedCacheWithLoader[K comparable, V any] struct {
+	*TypedCache[K, V]
+	mu      *sync.Mutex
+	loading map[K]func() (V, error)
+	loader  loaderFunc[K, V]
+}
+
+func NewTypedCacheWithLoader[K comparable, V any](typedCache *TypedCache[K, V], loader loaderFunc[K, V]) *TypedCacheWithLoader[K, V] {
+	return &TypedCacheWithLoader[K, V]{
+		TypedCache: typedCache,
+		mu:         &sync.Mutex{},
+		loading:    make(map[K]func() (V, error)),
+		loader:     loader,
+	}
+}
+
+// GetOrWait retrieves an item from the cache and waits on any other goroutine that is setting the value
+func (tc *TypedCacheWithLoader[K, V]) GetOrWait(ctx context.Context, key K) (V, error) {
+	tc.mu.Lock()
+	value, found := tc.cache.Get(fmt.Sprintf("%v", key))
+	if found {
+		return value, nil
+	}
+
+	// Check if we are already loading the value
+	load := tc.loading[key]
+	if load != nil {
+		tc.mu.Unlock()
+		return load()
+	}
+
+	// Haven't started loading it
+	load = sync.OnceValues(func() (V, error) {
+		v, err := tc.loader(ctx, key)
+		tc.mu.Lock()
+		defer tc.mu.Unlock()
+
+		delete(tc.loading, key)
+		if err != nil {
+			return v, err
+		}
+		tc.Set(key, v)
+		return v, nil
+	})
+	tc.loading[key] = load
+	tc.mu.Unlock()
+	return load()
+
 }

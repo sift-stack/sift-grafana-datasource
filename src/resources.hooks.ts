@@ -212,16 +212,22 @@ export const useFetchChannels = (
         setLoading(false);
         return;
       }
-      console.log('fetchChannels', assetIds, searchTerm, channelNames);
       setLoading(true);
       try {
         let channels: Channel[] = [];
         if (channelNames && channelNames.length > 0) {
-          const response = await datasource.getResource<{ channels: Channel[] }>('channels', {
-            channelNames: channelNames,
-            assetIds,
+          // Naive implementation to always include any channel names previously selected
+          // by fudging a channel with just a name which is sufficient for an as select query
+          const channelsFromNames = channelNames.map((name) => {
+            return {
+              channelId: '',
+              name,
+              assetId: '',
+              assetName: '',
+            } as Channel;
           });
-          channels.push(...(response.channels || []));
+
+          channels.push(...channelsFromNames);
         }
         const response = await datasource.getResource<{ channels: Channel[] }>('channels', {
           searchTerm: searchTerm || '',

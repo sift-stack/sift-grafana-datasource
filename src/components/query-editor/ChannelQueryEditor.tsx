@@ -73,7 +73,7 @@ export const ChannelQueryEditor = ({
   }, [onUpdateChannel, selectEnabled, selectedChannelType]);
 
   const [channelFilter, setChannelFilter] = useState<string>('');
-  const selectedChannelIds = useMemo(
+  const selectedChannelNames = useMemo(
     () => (selectedChannelType === SelectableInputTypes.SELECT && selectedChannelValue ? [selectedChannelValue] : []),
     [selectedChannelType, selectedChannelValue]
   );
@@ -81,30 +81,17 @@ export const ChannelQueryEditor = ({
     (searchTerm: string) => {
       if (searchTerm !== channelFilter) {
         setChannelFilter(searchTerm);
-        void loadChannels(selectedAssetIds, searchTerm, selectedChannelIds || undefined);
+        void loadChannels(selectedAssetIds, searchTerm, selectedChannelNames || undefined);
       }
     },
-    [channelFilter, loadChannels, selectedAssetIds, selectedChannelIds]
+    [channelFilter, loadChannels, selectedAssetIds, selectedChannelNames]
   );
 
   useEffect(() => {
     if (selectedChannelType === SelectableInputTypes.SELECT) {
-      void loadChannels(selectedAssetIds, undefined, selectedChannelIds || undefined);
+      void loadChannels(selectedAssetIds, undefined, selectedChannelNames || undefined);
     }
-  }, [selectedChannelType, selectedAssetIds, selectedChannelIds, loadChannels]);
-
-  // If selected AssetIds change, need to update selection
-  const selectedAssetIdsRef = useRef<string[]>(selectedAssetIds);
-  const lastSelectedAssetIdsRef = useRef<string[]>([]);
-  useEffect(() => {
-    if (selectedAssetIdsRef.current !== selectedAssetIds) {
-      lastSelectedAssetIdsRef.current = selectedAssetIdsRef.current;
-      selectedAssetIdsRef.current = selectedAssetIds;
-      if (selectedChannelType === SelectableInputTypes.SELECT) {
-        setSelectedChannelValue('');
-      }
-    }
-  }, [selectedAssetIds, selectedChannelType]);
+  }, [selectedChannelType, selectedAssetIds, selectedChannelNames, loadChannels]);
 
   const channelSelectableTypes = useMemo(
     () => [

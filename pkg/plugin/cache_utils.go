@@ -53,7 +53,6 @@ func (tc *TypedCache[K, V]) Get(key K) (V, bool) {
 	if !ok {
 		return result, false
 	}
-
 	return typedValue, true
 }
 
@@ -99,7 +98,7 @@ func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backen
 	comparableKey := tc.keyToComparable(key)
 	value, found := tc.cache.Get(fmt.Sprintf("%v", comparableKey))
 	if found {
-		log.DefaultLogger.Debug("found in cache", "key", key)
+		tc.mu.Unlock()
 		return value, nil
 	}
 
@@ -107,12 +106,12 @@ func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backen
 	load := tc.loading[comparableKey]
 	if load != nil {
 		tc.mu.Unlock()
-		log.DefaultLogger.Debug("waiting for pending cache load", "key", key)
+		log.DefaultLogger.Debug("waiting for pending cache load", "key", comparableKey)
 		return load()
 	}
 
 	// Haven't started loading it
-	log.DefaultLogger.Debug("initiating new cache load", "key", key)
+	log.DefaultLogger.Debug("initiating new cache load", "key", comparableKey)
 	load = sync.OnceValues(func() (V, error) {
 		v, err := tc.loader(d, ctx, key)
 		tc.mu.Lock()

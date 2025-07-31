@@ -199,24 +199,28 @@ export const useFetchChannels = (
 ): {
   channels: Channel[];
   loading: boolean;
-  loadChannels: (assetIds: string[], searchTerm?: string, channelIds?: string[]) => Promise<void>;
+  loadChannels: (assetIds: string[], searchTerm?: string, channelNames?: string[]) => Promise<void>;
 } => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
-  const latestArgsRef = useRef<{ assetIds: string[]; searchTerm?: string; channelIds?: string[] }>();
+  const latestArgsRef = useRef<{ assetIds: string[]; searchTerm?: string; channelNames?: string[] }>();
 
   const fetchChannels = useCallback(
-    async (assetIds: string[], searchTerm?: string, channelIds?: string[]) => {
+    async (assetIds: string[], searchTerm?: string, channelNames?: string[]) => {
       if (assetIds.length === 0) {
         setChannels([]);
         setLoading(false);
         return;
       }
+      console.log('fetchChannels', assetIds, searchTerm, channelNames);
       setLoading(true);
       try {
         let channels: Channel[] = [];
-        if (channelIds && channelIds.length > 0) {
-          const response = await datasource.getResource<{ channels: Channel[] }>('channels', { channelIds });
+        if (channelNames && channelNames.length > 0) {
+          const response = await datasource.getResource<{ channels: Channel[] }>('channels', {
+            channelNames: channelNames,
+            assetIds,
+          });
           channels.push(...(response.channels || []));
         }
         const response = await datasource.getResource<{ channels: Channel[] }>('channels', {
@@ -273,10 +277,11 @@ export const useFetchChannels = (
   }, [debouncedFetchChannels]);
 
   const loadChannels = useCallback(
-    async (assetIds: string[], searchTerm?: string, channelIds?: string[]): Promise<void> => {
+    async (assetIds: string[], searchTerm?: string, channelNames?: string[]): Promise<void> => {
       setLoading(true);
-      latestArgsRef.current = { assetIds, searchTerm, channelIds };
-      debouncedFetchChannels(assetIds, searchTerm, channelIds);
+      console.log('loadChannels', assetIds, searchTerm, channelNames);
+      latestArgsRef.current = { assetIds, searchTerm, channelNames: channelNames };
+      debouncedFetchChannels(assetIds, searchTerm, channelNames);
     },
     [debouncedFetchChannels, setLoading]
   );

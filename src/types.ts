@@ -1,6 +1,8 @@
 import { DataSourceJsonData, QueryVariableModel, VariableWithOptions } from '@grafana/data';
 import { DataQuery } from '@grafana/schema';
 
+export const QUERY_VERSION = '2.1';
+
 export interface Asset {
   assetId: string;
   name: string;
@@ -69,7 +71,7 @@ export interface SiftQuery extends DataQuery {
 export const DEFAULT_QUERY: Partial<SiftQuery> = {
   channelDataQueries: [],
   combineRuns: true,
-  queryVersion: '2',
+  queryVersion: QUERY_VERSION,
 };
 
 /**

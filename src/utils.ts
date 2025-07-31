@@ -7,7 +7,7 @@ import {
   DEFAULT_CALCULATED_CHANNEL_DATA_QUERY,
   DEFAULT_CHANNEL_DATA_QUERY,
   DEFAULT_CHANNEL_QUERY,
-  DEFAULT_RUN_QUERY
+  DEFAULT_RUN_QUERY,
 } from './constants';
 import {
   Asset,
@@ -21,7 +21,7 @@ import {
   QueryTypes,
   Run,
   RunQuery,
-  SiftQuery
+  SiftQuery,
 } from './types';
 
 export const getValueAndSelectionTypeFromQuery = (
@@ -31,13 +31,17 @@ export const getValueAndSelectionTypeFromQuery = (
   if (!query) {
     return result;
   }
+  const isChannelQuery = 'channelId' in query || 'channelName' in query;
   const idPropName = Object.keys(query).find((key) => key.endsWith('Id')) ?? '';
   const namePropName = Object.keys(query).find((key) => key.endsWith('Name')) ?? '';
 
   if ('dashboardVariableName' in query && query.dashboardVariableName) {
     result = [query.dashboardVariableName, SelectableInputTypes.DASHBOARD];
   } else if ('asSelect' in query && query.asSelect) {
-    result = [(query as any)[idPropName] || '', SelectableInputTypes.SELECT];
+    result = [
+      isChannelQuery ? (query as any)[namePropName] || '' : (query as any)[idPropName] || '',
+      SelectableInputTypes.SELECT,
+    ];
   } else if ('nameAsRegex' in query && query.nameAsRegex) {
     result = [(query as any)[namePropName] || '', SelectableInputTypes.REGEX];
   } else if (idPropName && namePropName) {
@@ -93,7 +97,7 @@ export const channelQueryFromSelection = (selection: string, selectionType: Sele
     case SelectableInputTypes.ID:
       return { channelId: selection };
     case SelectableInputTypes.SELECT:
-      return { channelId: selection, asSelect: true };
+      return { channelName: selection, asSelect: true };
     case SelectableInputTypes.REGEX:
       return { channelName: selection, nameAsRegex: true };
     default:
@@ -142,7 +146,7 @@ export const runToSelectableValue = (run: Run): SelectableValue<string> => {
 export const channelToSelectableValue = (channel: Channel): SelectableValue<string> => {
   return {
     label: channel.name,
-    value: channel.channelId,
+    value: channel.name,
     description: channel.unit,
   };
 };

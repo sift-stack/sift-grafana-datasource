@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -36,7 +35,7 @@ var (
 	_ backend.CallResourceHandler   = (*SiftDatasource)(nil)
 )
 
-const QueryVersion = "2"
+const QueryVersion = "2.1"
 
 const maxParallelDataQueries = 10
 
@@ -895,41 +894,7 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 	channelIdQueries := []string{}
 	channelIdFromSelectQueries := []string{} // asSelect also redupes channels with the same name
 	for _, channelQuery := range cdq.ChannelQueries {
-		channelInCache, _ := d.isChannelInCache(channelQuery.ChannelId, assetIds)
-		if channelQuery.ChannelId != "" && channelQuery.ChannelName != "" && !channelInCache {
-			// If we have a channel ID and name, and it's not in the cache, then we are likely in the
-			// scenario where the channel was previously queried for and cached for a different asset,
-			// and the asset has been changed through a dashboard query variable.
-			// In this case, we need to search for the channel by name again to make sure it exists on
-			// the new asset. We'll use an exact regex match pattern to make sure we find the correct
-			// channel and don't return any substring matches, and cache this new asset/channel pair.
-			// Note that when this happens, even though we're able to resolve the correct channel ID
-			// here, the frontend will have the wrong channel ID.
-			channelSearches := make([]channelSearchKey, 0)
-			for _, assetId := range assetIds {
-				// Create CEL compatible exact regex match pattern
-				// Escape special regex characters and wrap with ^ and $ for exact match
-				escapedName := regexp.QuoteMeta(channelQuery.ChannelName)
-				exactMatchPattern := fmt.Sprintf("^%s$", escapedName)
-				channelQuery.ChannelName = exactMatchPattern
-				channelSearches = append(channelSearches, channelSearchKey{
-					assetId:    assetId,
-					searchTerm: channelQuery.ChannelName,
-				})
-			}
-			results, err := parallelSearchChannels(pCtx, channelSearches, true, 10, d.getChannelsByName)
-			if err != nil {
-				return nil, fmt.Errorf("error looking up channels: %w", err)
-			}
-			for _, channels := range results {
-				for _, channel := range channels {
-					// Any channels that are not a compatible data type, remove from query
-					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {
-						channelIds = append(channelIds, channel.ChannelId)
-					}
-				}
-			}
-		} else if channelQuery.ChannelId != "" {
+		if channelQuery.ChannelId != "" {
 			if channelQuery.AsSelect {
 				channelIdFromSelectQueries = append(channelIdFromSelectQueries, channelQuery.ChannelId)
 			} else {
@@ -959,18 +924,8 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 			}
 		}
 	}
-	// Find all channels with same name from select
-	channelsFromSelect, err := d.getChannelsAndSameNameChannelsById(pCtx, channelIdFromSelectQueries, assetIds)
 
-	if err != nil {
-		return nil, fmt.Errorf("error looking up channels: %w", err)
-	}
-	for _, channel := range channelsFromSelect {
-		channelIds = append(channelIds, channel.ChannelId)
-	}
-
-	results, err := d.getChannelsById(pCtx, channelIdQueries, assetIds)
-
+	results, err := d.getChannelsById(pCtx, channelIdQueries)
 	if err != nil {
 		return nil, fmt.Errorf("error looking up channels: %w", err)
 	}
@@ -1035,11 +990,7 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 				if channelRef.ChannelId != "" {
 					var results []Channel
 					var err error
-					if channelRef.AsSelect {
-						results, err = d.getChannelsAndSameNameChannelsById(pCtx, []string{channelRef.ChannelId}, assetIds)
-					} else {
-						results, err = d.getChannelsById(pCtx, []string{channelRef.ChannelId}, assetIds)
-					}
+					results, err = d.getChannelsById(pCtx, []string{channelRef.ChannelId})
 					if err != nil {
 						return nil, nil, fmt.Errorf("error looking up channels: %w", err)
 					}

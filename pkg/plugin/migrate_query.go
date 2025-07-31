@@ -55,14 +55,28 @@ func convertQueryIfNeeded(q json.RawMessage) (*queryModel, error) {
 
 	// query version "1" is the legacy format, but it did not provide versioning
 	if !hasQueryVersion {
-		migratedModel, err := convertQuery(q)
+		migratedModel, err := convertLegacyQuery(q)
 		if err != nil {
-			return nil, fmt.Errorf("query migration failed: %w", err)
+			return nil, fmt.Errorf("query migration from legacy failed: %w", err)
 		}
+		log.DefaultLogger.Debug("migrated query from legacy", "original", q, "migrated", migratedModel)
 		return migratedModel, nil
 	} else {
 		switch queryVersion {
 		case "2":
+			// Convert selections
+			var fqm queryModel
+			if err := json.Unmarshal(q, &fqm); err != nil {
+				return nil, fmt.Errorf("failed to parse query model: %w", err)
+			}
+			migratedModel, err := convertFromV2ToV2_1(fqm)
+			if err != nil {
+				return nil, fmt.Errorf("query migration from v2 to v2.1 failed: %w", err)
+			}
+			log.DefaultLogger.Debug("migrated query from v2 to v2.1", "original", q, "migrated", migratedModel)
+			return &migratedModel, nil
+
+		case "2.1":
 			// Not a legacy query, parse normally
 			var fqm queryModel
 			if err := json.Unmarshal(q, &fqm); err != nil {
@@ -78,8 +92,24 @@ func convertQueryIfNeeded(q json.RawMessage) (*queryModel, error) {
 	}
 }
 
-// convertQuery parses a given DataQuery and migrates it if necessary.
-func convertQuery(orig json.RawMessage) (*queryModel, error) {
+// convertFromV2ToV2_1 converts a query from v2 to v2.1 by removing channelId from the channel AsSelect queries
+// Previously, ID was used for the select value, but the backend searched the name anyway. Now, the name is used directly
+// and the ID is not needed.
+func convertFromV2ToV2_1(q queryModel) (queryModel, error) {
+	for i := range q.ChannelDataQueries {
+		for j := range q.ChannelDataQueries[i].ChannelQueries {
+			if q.ChannelDataQueries[i].ChannelQueries[j].AsSelect {
+				q.ChannelDataQueries[i].ChannelQueries[j].ChannelId = ""
+			}
+
+		}
+	}
+	q.QueryVersion = "2.1"
+	return q, nil
+}
+
+// convertLegacyQuery parses a given DataQuery and migrates it if necessary.
+func convertLegacyQuery(orig json.RawMessage) (*queryModel, error) {
 	log.DefaultLogger.Debug("migrating query", "query", orig)
 
 	input := &legacyQueryModel{}

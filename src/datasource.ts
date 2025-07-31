@@ -4,7 +4,7 @@ import { Observable, from } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { SiftVariableSupport } from 'variables';
 import { SiftDataSourceCache } from './datasourceCache';
-import { DEFAULT_QUERY, SiftDataSourceOptions, SiftQuery } from './types';
+import { DEFAULT_QUERY, SiftDataSourceOptions, SiftQuery, QUERY_VERSION } from './types';
 import { ensureQueryDefaults, filterQueryBeforeRequest, replaceTemplateVariablesInQuery } from './utils';
 
 export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSourceOptions> {
@@ -44,8 +44,9 @@ export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSou
     // Ensure required fields are present
     const queryWithDefaults = ensureQueryDefaults(query);
 
-    if ('queries' in query || 'calculatedChannelQuery' in query) {
+    if ('queries' in query || 'calculatedChannelQuery' in query || query.queryVersion !== QUERY_VERSION) {
       const result = await this.postResource<SiftQuery>('migrate-query', query);
+      console.log('migrated query', result);
       return { ...result, refId: query.refId || '' };
     }
 

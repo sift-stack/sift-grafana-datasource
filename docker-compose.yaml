@@ -23,7 +23,7 @@ services:
       # output to terminal
       - TERM=linux
       - GF_DEFAULT_APP_MODE=development
-      - GF_LOG_LEVEL=info
+      - GF_LOG_LEVEL=debug
       - GF_DATAPROXY_LOGGING=true
       # allow anonymous admin so we don't have to set up a password to start testing
       - GF_AUTH_ANONYMOUS_ENABLED=true

@@ -48,6 +48,7 @@ export const ChannelQueryEditor = ({
     const [value, type] = getValueAndSelectionTypeFromQuery(channelQuery);
     setSelectedChannelValue(value);
     setSelectedChannelType(type);
+    console.log('channelQueryChanged', channelQuery, value, type);
   }, [channelQuery]);
 
   const onUpdateChannel = useCallback(
@@ -57,7 +58,7 @@ export const ChannelQueryEditor = ({
         onUpdateQuery(channelQueryFromSelection(value, type), channelQueryId);
       } else {
         setSelectedChannelValue(value?.value || '');
-        onUpdateQuery({ channelId: value?.value, channelName: value?.label, asSelect: true }, channelQueryId);
+        onUpdateQuery({ channelName: value?.label, asSelect: true }, channelQueryId);
       }
     },
     [channelQueryId, onUpdateQuery]

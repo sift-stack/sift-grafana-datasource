@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -104,6 +106,18 @@ func (d *SiftDatasource) callResourceChannels(ctx context.Context, req *backend.
 	}
 
 	params := v // copy query params then overwrite any defaults
+	if params.Get("channelNames") != "" {
+		channelNames := strings.Split(params.Get("channelNames"), ",")
+		// Get channel names as regex group alternatives
+		escapedNames := make([]string, len(channelNames))
+		for i, name := range channelNames {
+			escapedNames[i] = "(" + regexp.QuoteMeta(name) + ")"
+		}
+		regexQuery := strings.Join(escapedNames, "|")
+		log.DefaultLogger.Debug("regex query", "regexQuery", regexQuery)
+		params.Set("searchTerm", regexQuery)
+		params.Del("channelNames")
+	}
 
 	params.Set("page_size", strconv.Itoa(ResourceLimit))
 

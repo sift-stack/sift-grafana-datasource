@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -484,33 +483,16 @@ func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []
 	return runIds, nil
 }
 
-// isChannelInCache checks if a channel ID associated with the correct asset ID is in the cache
-func (d *SiftDatasource) isChannelInCache(channelId string, assetId []string) (bool, *Channel) {
-	cachedChannel, found := d.channelsIdSearchCache.Get(channelId)
-	if !found {
-		return false, nil
-	}
-
-	// Check if the cached channel belongs to the expected asset
-	for _, id := range assetId {
-		if cachedChannel.AssetId == id {
-			return true, &cachedChannel
-		}
-	}
-	// Channel exists in cache but belongs to a different asset
-	return false, nil
-}
-
-func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds []string, assetIds []string) ([]Channel, error) {
+func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds []string) ([]Channel, error) {
 	startTime := time.Now()
 
 	cachedChannels := []Channel{}
 	channelIdsToSearch := []string{}
 
 	for _, channelId := range channelIds {
-		channelInCache, foundChannel := d.isChannelInCache(channelId, assetIds)
-		if channelInCache {
-			cachedChannels = append(cachedChannels, *foundChannel)
+		cachedChannel, found := d.channelsIdSearchCache.Get(channelId)
+		if found {
+			cachedChannels = append(cachedChannels, cachedChannel)
 		} else {
 			channelIdsToSearch = append(channelIdsToSearch, channelId)
 		}
@@ -612,37 +594,4 @@ func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId s
 
 	log.DefaultLogger.Debug("getChannelsByName", "duration", time.Since(startTime).Milliseconds(), "search", channelName, "assetId", assetId, "asRegex", asRegex, "noOfChannels", len(channels))
 	return channels, nil
-}
-
-// getChannelsAndSameNameChannelsById first finds channels by ID and then searches for channels with the same name
-// This is intended to handle the case in the frontend selection where there are multiple channels with the same name.
-// The frontend dedupes on name to make selection more clear, so this undoes that
-func (d *SiftDatasource) getChannelsAndSameNameChannelsById(pCtx backend.PluginContext, channelIds []string, assetIds []string) ([]Channel, error) {
-	startTime := time.Now()
-
-	channels, err := d.getChannelsById(pCtx, channelIds, assetIds)
-	if err != nil {
-		return nil, err
-	}
-
-	searchKeys := make([]channelSearchKey, len(channels))
-	for i, channel := range channels {
-		searchKeys[i] = channelSearchKey{
-			assetId:    channel.AssetId,
-			searchTerm: fmt.Sprintf("^%s$", regexp.QuoteMeta(channel.Name)), // Exact regex match
-		}
-	}
-
-	results, err := parallelSearchChannels(pCtx, searchKeys, true, 10, d.getChannelsByName)
-	if err != nil {
-		return nil, err
-	}
-	allChannels := []Channel{}
-	for _, resultChannels := range results {
-		allChannels = append(allChannels, resultChannels...)
-	}
-
-	log.DefaultLogger.Debug("getChannelsAndSameNameChannelsById", "duration", time.Since(startTime).Milliseconds(), "noOfChannels", len(allChannels))
-
-	return allChannels, nil
 }

@@ -622,9 +622,9 @@ func TestConvertQuery(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotNil(t, result)
 
-			// If direct conversion is needed, also test convertQuery
+			// If direct conversion is needed, also test convertLegacyQuery
 			if tt.needsMigration {
-				directResult, err := convertQuery(query)
+				directResult, err := convertLegacyQuery(query)
 				require.NoError(t, err)
 
 				// Use a full object comparison

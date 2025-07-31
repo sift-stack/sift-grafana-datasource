@@ -157,7 +157,6 @@ describe('ChannelQueryEditor', () => {
     const [calledQuery, calledId] = defaultProps.onUpdateQuery.mock.calls[0];
     expect(calledId).toBe('test-id');
     expect(calledQuery).toMatchObject({
-      channelId: 'ch1',
       channelName: 'Channel 1',
       asSelect: true,
     });

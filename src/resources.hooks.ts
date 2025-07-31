@@ -199,14 +199,14 @@ export const useFetchChannels = (
 ): {
   channels: Channel[];
   loading: boolean;
-  loadChannels: (assetIds: string[], searchTerm?: string, channelIds?: string[]) => Promise<void>;
+  loadChannels: (assetIds: string[], searchTerm?: string, channelNames?: string[]) => Promise<void>;
 } => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
-  const latestArgsRef = useRef<{ assetIds: string[]; searchTerm?: string; channelIds?: string[] }>();
+  const latestArgsRef = useRef<{ assetIds: string[]; searchTerm?: string; channelNames?: string[] }>();
 
   const fetchChannels = useCallback(
-    async (assetIds: string[], searchTerm?: string, channelIds?: string[]) => {
+    async (assetIds: string[], searchTerm?: string, channelNames?: string[]) => {
       if (assetIds.length === 0) {
         setChannels([]);
         setLoading(false);
@@ -215,9 +215,19 @@ export const useFetchChannels = (
       setLoading(true);
       try {
         let channels: Channel[] = [];
-        if (channelIds && channelIds.length > 0) {
-          const response = await datasource.getResource<{ channels: Channel[] }>('channels', { channelIds });
-          channels.push(...(response.channels || []));
+        if (channelNames && channelNames.length > 0) {
+          // Naive implementation to always include any channel names previously selected
+          // by fudging a channel with just a name which is sufficient for an as select query
+          const channelsFromNames = channelNames.map((name) => {
+            return {
+              channelId: '',
+              name,
+              assetId: '',
+              assetName: '',
+            } as Channel;
+          });
+
+          channels.push(...channelsFromNames);
         }
         const response = await datasource.getResource<{ channels: Channel[] }>('channels', {
           searchTerm: searchTerm || '',
@@ -273,10 +283,11 @@ export const useFetchChannels = (
   }, [debouncedFetchChannels]);
 
   const loadChannels = useCallback(
-    async (assetIds: string[], searchTerm?: string, channelIds?: string[]): Promise<void> => {
+    async (assetIds: string[], searchTerm?: string, channelNames?: string[]): Promise<void> => {
       setLoading(true);
-      latestArgsRef.current = { assetIds, searchTerm, channelIds };
-      debouncedFetchChannels(assetIds, searchTerm, channelIds);
+      console.log('loadChannels', assetIds, searchTerm, channelNames);
+      latestArgsRef.current = { assetIds, searchTerm, channelNames: channelNames };
+      debouncedFetchChannels(assetIds, searchTerm, channelNames);
     },
     [debouncedFetchChannels, setLoading]
   );

@@ -142,7 +142,7 @@ describe('utils', () => {
     });
     it('returns correct object for SELECT', () => {
       expect(channelQueryFromSelection('idval', SelectableInputTypes.SELECT)).toEqual({
-        channelId: 'idval',
+        channelName: 'idval',
         asSelect: true,
       });
     });

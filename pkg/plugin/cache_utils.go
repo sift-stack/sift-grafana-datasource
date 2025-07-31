@@ -1,8 +1,9 @@
 package plugin
 
 import (
-	"context"
 	"fmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/patrickmn/go-cache"
 	"math/rand"
 	"sync"
@@ -74,17 +75,15 @@ func (tc *TypedCache[K, V]) getRandomizedTimeToLive() time.Duration {
 	return time.Duration(rand.Intn(int(tc.maxTtl-tc.minTtl))) + tc.minTtl
 }
 
-type loaderFunc[K any, V any] func(context.Context, K) (V, error)
-
 type TypedCacheWithLoader[K any, V any, C comparable] struct {
 	*TypedCache[C, V]
 	mu              *sync.Mutex
 	keyToComparable func(K) C
 	loading         map[C]func() (V, error)
-	loader          loaderFunc[K, V]
+	loader          func(*SiftDatasource, backend.PluginContext, K) (V, error)
 }
 
-func NewTypedCacheWithLoader[K comparable, V any, C comparable](typedCache *TypedCache[C, V], loader loaderFunc[K, V], keyToComparable func(K) C) *TypedCacheWithLoader[K, V, C] {
+func NewTypedCacheWithLoader[K any, V any, C comparable](typedCache *TypedCache[C, V], loader func(*SiftDatasource, backend.PluginContext, K) (V, error), keyToComparable func(K) C) *TypedCacheWithLoader[K, V, C] {
 	return &TypedCacheWithLoader[K, V, C]{
 		TypedCache:      typedCache,
 		mu:              &sync.Mutex{},
@@ -95,11 +94,12 @@ func NewTypedCacheWithLoader[K comparable, V any, C comparable](typedCache *Type
 }
 
 // GetOrWait retrieves an item from the cache and waits on any other goroutine that is setting the value
-func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(ctx context.Context, key K) (V, error) {
+func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backend.PluginContext, key K) (V, error) {
 	tc.mu.Lock()
 	comparableKey := tc.keyToComparable(key)
 	value, found := tc.cache.Get(fmt.Sprintf("%v", comparableKey))
 	if found {
+		log.DefaultLogger.Debug("found in cache", "key", key)
 		return value, nil
 	}
 
@@ -107,12 +107,14 @@ func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(ctx context.Context, key K) (
 	load := tc.loading[comparableKey]
 	if load != nil {
 		tc.mu.Unlock()
+		log.DefaultLogger.Debug("waiting for pending cache load", "key", key)
 		return load()
 	}
 
 	// Haven't started loading it
+	log.DefaultLogger.Debug("initiating new cache load", "key", key)
 	load = sync.OnceValues(func() (V, error) {
-		v, err := tc.loader(ctx, key)
+		v, err := tc.loader(d, ctx, key)
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 

@@ -537,33 +537,15 @@ func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds 
 	return channels, nil
 }
 
-func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId string, channelName string, asRegex bool) ([]Channel, error) {
+// getChannelsByNameSearch - search for channels by regex query. Does not use cache and is intended to be used by the TypedCacheWithLoader
+func getChannelsByNameSearch(d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
 	startTime := time.Now()
-
-	cacheKey := channelCacheKey{
-		assetId: assetId,
-		search:  channelName,
-	}
-
-	if asRegex {
-		cachedChannels, found := d.channelsRegexSearchCache.Get(cacheKey.String())
-		if found {
-			return cachedChannels, nil
-		}
-	} else {
-		cachedChannels, found := d.channelsNameSearchCache.Get(cacheKey.String())
-		if found {
-			return cachedChannels, nil
-		}
-	}
 
 	params := url.Values{}
 	params.Set("isSearchCaseSensitive", "true")
-	if asRegex {
-		params.Set("isSearchRegexp", "true")
-	}
-	params.Set("assetIds", assetId)
-	params.Set("searchTerm", channelName)
+	params.Set("isSearchRegexp", "true")
+	params.Set("assetIds", query.assetId)
+	params.Set("searchTerm", query.searchTerm)
 
 	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
 		pCtx:        pCtx,
@@ -582,16 +564,49 @@ func (d *SiftDatasource) getChannelsByName(pCtx backend.PluginContext, assetId s
 		return nil, err
 	}
 
-	if len(channels) > MaxChannelRegexMatches && asRegex {
-		return nil, fmt.Errorf("channel regex `%s` matches too many channels (>%d). Increase regex specificity or use a different selection type", channelName, MaxChannelRegexMatches)
+	if len(channels) > MaxChannelRegexMatches {
+		return nil, fmt.Errorf("channel regex `%s` matches too many channels (>%d). Increase regex specificity or use a different selection type", query.searchTerm, MaxChannelRegexMatches)
 	}
 
-	if asRegex {
-		d.channelsRegexSearchCache.Set(cacheKey.String(), channels)
-	} else {
-		d.channelsNameSearchCache.Set(cacheKey.String(), channels)
+	channelIds := []string{}
+	for _, channel := range channels {
+		channelIds = append(channelIds, channel.ChannelId)
 	}
 
-	log.DefaultLogger.Debug("getChannelsByName", "duration", time.Since(startTime).Milliseconds(), "search", channelName, "assetId", assetId, "asRegex", asRegex, "noOfChannels", len(channels))
+	log.DefaultLogger.Debug("getChannelsByNameSearch", "duration", time.Since(startTime).Milliseconds(), "search", query.searchTerm, "assetId", query.assetId, "noOfChannels", len(channels), "channelIds", channelIds)
+	return channels, nil
+}
+
+// getChannelsByNameExact - search for channels by exact name query. Does not use cache and is intended to be used by the TypedCacheWithLoader
+func getChannelsByNameExact(d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
+	startTime := time.Now()
+
+	params := url.Values{}
+	channelFilter := celUtils.And(celUtils.Equals("asset_id", query.assetId), celUtils.Equals("name", query.searchTerm))
+	params.Set("filter", channelFilter)
+
+	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
+		pCtx:        pCtx,
+		method:      "GET",
+		path:        "/api/v3/channels",
+		queryParams: params,
+	}, MaxQueryPageSize, MaxQueryPages, func(respBody []byte) ([]Channel, string, error) {
+		response := listChannelsQueryResponse{}
+		err := json.Unmarshal(respBody, &response)
+		if err != nil {
+			return nil, "", fmt.Errorf("json unmarshal: %w", err)
+		}
+		return response.Channels, response.NextPageToken, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	channelIds := []string{}
+	for _, channel := range channels {
+		channelIds = append(channelIds, channel.ChannelId)
+	}
+
+	log.DefaultLogger.Debug("getChannelsByNameExact", "duration", time.Since(startTime).Milliseconds(), "search", query.searchTerm, "assetId", query.assetId, "noOfChannels", len(channels), "channelIds", channelIds)
 	return channels, nil
 }

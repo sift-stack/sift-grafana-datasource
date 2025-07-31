@@ -48,7 +48,6 @@ export const ChannelQueryEditor = ({
     const [value, type] = getValueAndSelectionTypeFromQuery(channelQuery);
     setSelectedChannelValue(value);
     setSelectedChannelType(type);
-    console.log('channelQueryChanged', channelQuery, value, type);
   }, [channelQuery]);
 
   const onUpdateChannel = useCallback(

@@ -41,16 +41,11 @@ export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSou
   }
 
   async migrateQuery(query: Partial<SiftQuery>): Promise<SiftQuery> {
-    // Ensure required fields are present
-    const queryWithDefaults = ensureQueryDefaults(query);
-
     if ('queries' in query || 'calculatedChannelQuery' in query || query.queryVersion !== QUERY_VERSION) {
       const result = await this.postResource<SiftQuery>('migrate-query', query);
-      console.log('migrated query', result);
       return { ...result, refId: query.refId || '' };
     }
-
-    return queryWithDefaults as SiftQuery;
+    return ensureQueryDefaults(query) as SiftQuery;
   }
 
   applyTemplateVariables(query: SiftQuery, scopedVars: ScopedVars): SiftQuery {

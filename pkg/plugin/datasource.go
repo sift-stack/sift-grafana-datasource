@@ -892,14 +892,9 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 	channelIds := []string{}
 	// Get all channel IDs for the channel queries
 	channelIdQueries := []string{}
-	channelIdFromSelectQueries := []string{} // asSelect also redupes channels with the same name
 	for _, channelQuery := range cdq.ChannelQueries {
 		if channelQuery.ChannelId != "" {
-			if channelQuery.AsSelect {
-				channelIdFromSelectQueries = append(channelIdFromSelectQueries, channelQuery.ChannelId)
-			} else {
-				channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
-			}
+			channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
 		} else if channelQuery.ChannelName != "" {
 			// If we have a channel name, search for matching channels for each asset
 			channelSearches := make([]channelSearchKey, 0)

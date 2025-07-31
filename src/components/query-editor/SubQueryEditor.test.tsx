@@ -433,7 +433,7 @@ describe('SubQueryEditor', () => {
         assetQueries: [],
         runQueries: [],
         channelQueries: [
-          { channelId: 'ch1', channelName: 'Channel1', asSelect: true },
+          { channelName: 'Channel 1', asSelect: true },
           { channelName: 'RegexChannel', nameAsRegex: true },
           { channelId: 'ch4' },
           { channelName: 'SomeChannel' },

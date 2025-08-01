@@ -1,5 +1,7 @@
 # Changelog
 
+See [Github releases](https://github.com/sift-stack/sift-grafana-datasource/releases) for recent changes.
+
 ## 1.0.0
 
 Initial release.

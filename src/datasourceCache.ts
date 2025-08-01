@@ -138,9 +138,11 @@ export class SiftDataSourceCache {
       }
 
       let newFrames: DataFrame[][] = [];
-      // Fire off sub‑queries for each missing range
-      await Promise.all(
-        fetchRanges.map(async (rng) => {
+      // Sequential processing using reduce since parallel requests will cancel each other
+      await fetchRanges.reduce(async (previousPromise, rng) => {
+        await previousPromise; // Wait for the previous request to complete
+
+        try {
           const subReq: DataQueryRequest<SiftQuery> = {
             ...request,
             range: {
@@ -157,27 +159,45 @@ export class SiftDataSourceCache {
             console.error(
               `Panel ${panelId} - Failed to fetch data from ${new Date(rng.from).toISOString()} to ${new Date(
                 rng.to
-              ).toISOString()}`
+              ).toISOString()}`,
+              subResp
             );
           }
-        })
-      );
+        } catch (error) {
+          console.error(
+            `Panel ${panelId} - Error fetching range ${new Date(rng.from).toISOString()} to ${new Date(
+              rng.to
+            ).toISOString()}:`,
+            error
+          );
+        }
+      }, Promise.resolve());
 
-      let updatedCacheFrames: DataFrame[] = [];
+      let refIdToFrameMap = new Map<string, DataFrame>();
+
+      // Initialize the map with trimmed cache frames
+      trimmedCacheFrames.forEach((frame) => {
+        if (frame.refId) {
+          refIdToFrameMap.set(frame.refId, frame);
+        }
+      });
+
+      // Process new frames and merge with cached ones
       newFrames.forEach((frames) => {
         frames.forEach((frame) => {
-          const matchingCachedFrame = trimmedCacheFrames.find((cachedFrame) => {
-            return cachedFrame.refId === frame.refId;
-          });
-
-          // If cached frame exists, append to it
-          if (matchingCachedFrame) {
-            updatedCacheFrames.push(appendFramesByTime(matchingCachedFrame, frame));
-          } else {
-            updatedCacheFrames.push(frame);
+          if (frame.refId) {
+            const cachedFrame = refIdToFrameMap.get(frame.refId);
+            if (cachedFrame) {
+              refIdToFrameMap.set(frame.refId, appendFramesByTime(cachedFrame, frame));
+            } else {
+              refIdToFrameMap.set(frame.refId, frame);
+            }
           }
         });
       });
+
+      // Convert map back to array
+      const updatedCacheFrames = Array.from(refIdToFrameMap.values());
 
       const filteredFrames = updatedCacheFrames.map((frame) => filterFrameByTimeRange(frame, newFrom, newTo));
 

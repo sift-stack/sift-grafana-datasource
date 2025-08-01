@@ -57,13 +57,8 @@ const cacheTimeToLiveMax = time.Minute * 10
 const cacheTimeToLiveMin = cacheTimeToLiveMax / 2
 const cachePurgeTime = time.Minute * 5
 
-type channelCacheKey struct {
-	assetId string
-	search  string
-}
-
-func (c channelCacheKey) String() string {
-	return fmt.Sprintf("[%s] %s", c.assetId, c.search)
+func StringFromChannelSearchKey(c channelSearchKey) string {
+	return fmt.Sprintf("[%s] %s", c.assetId, c.searchTerm)
 }
 
 // NewSiftDatasource creates a new datasource instance.
@@ -87,8 +82,16 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 	runsNameCache := NewTypedCacheWithRandomTtl[string, []string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	runsRegexCache := NewTypedCacheWithRandomTtl[string, []string](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
 	channelIdsCache := NewTypedCache[string, Channel](cacheTimeToLiveMax, cachePurgeTime)
-	channelNameCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
-	channelRegexCache := NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime)
+
+	channelNameCache := NewTypedCacheWithLoader[channelSearchKey, []Channel, string](
+		NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime),
+		getChannelsByNameExact,
+		StringFromChannelSearchKey)
+	channelRegexCache := NewTypedCacheWithLoader[channelSearchKey, []Channel, string](
+		NewTypedCacheWithRandomTtl[string, []Channel](cacheTimeToLiveMax, cacheTimeToLiveMin, cachePurgeTime),
+		getChannelsByNameSearch,
+		StringFromChannelSearchKey)
+
 	return &SiftDatasource{
 		httpClient:               httpClient,
 		assetsIdSearchCache:      assetsIdsCache,
@@ -106,16 +109,17 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 // SiftDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 type SiftDatasource struct {
-	httpClient               *http.Client
-	assetsIdSearchCache      *TypedCache[string, string]
-	assetsNameSearchCache    *TypedCache[string, string] // assets are unique by name
-	assetsRegexSearchCache   *TypedCache[string, []string]
-	runsIdSearchCache        *TypedCache[string, string]
-	runsNameSearchCache      *TypedCache[string, []string] // runs are not unique by name
-	runsRegexSearchCache     *TypedCache[string, []string]
-	channelsIdSearchCache    *TypedCache[string, Channel]
-	channelsNameSearchCache  *TypedCache[string, []Channel]
-	channelsRegexSearchCache *TypedCache[string, []Channel]
+	httpClient             *http.Client
+	assetsIdSearchCache    *TypedCache[string, string]
+	assetsNameSearchCache  *TypedCache[string, string] // assets are unique by name
+	assetsRegexSearchCache *TypedCache[string, []string]
+	runsIdSearchCache      *TypedCache[string, string]
+	runsNameSearchCache    *TypedCache[string, []string] // runs are not unique by name
+	runsRegexSearchCache   *TypedCache[string, []string]
+	channelsIdSearchCache  *TypedCache[string, Channel]
+	// channel caches use loader to avoid duplicate API calls at the same time
+	channelsNameSearchCache  *TypedCacheWithLoader[channelSearchKey, []Channel, string]
+	channelsRegexSearchCache *TypedCacheWithLoader[channelSearchKey, []Channel, string]
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
@@ -897,19 +901,38 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 			channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
 		} else if channelQuery.ChannelName != "" {
 			// If we have a channel name, search for matching channels for each asset
-			channelSearches := make([]channelSearchKey, 0)
+			channelNameExactSearches := make([]channelSearchKey, 0)
+			channelNameRegexSearches := make([]channelSearchKey, 0)
 			for _, assetId := range assetIds {
-				channelSearches = append(channelSearches, channelSearchKey{
-					assetId:    assetId,
-					searchTerm: channelQuery.ChannelName,
-				})
+				if channelQuery.NameAsRegex {
+					channelNameRegexSearches = append(channelNameRegexSearches, channelSearchKey{
+						assetId:    assetId,
+						searchTerm: channelQuery.ChannelName,
+					})
+				} else {
+					channelNameExactSearches = append(channelNameExactSearches, channelSearchKey{
+						assetId:    assetId,
+						searchTerm: channelQuery.ChannelName,
+					})
+				}
 			}
-
-			results, err := parallelSearchChannels(pCtx, channelSearches, channelQuery.NameAsRegex, 10, d.getChannelsByName)
+			resultsExact, err := parallelSearchChannels(d, pCtx, channelNameExactSearches, 10, d.channelsNameSearchCache)
 			if err != nil {
-				return nil, fmt.Errorf("error looking up channels: %w", err)
+				return nil, fmt.Errorf("error looking up exact channels: %w", err)
 			}
-			for _, channels := range results {
+			for _, channels := range resultsExact {
+				for _, channel := range channels {
+					// Any channels that are not a compatible data type, remove from query
+					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {
+						channelIds = append(channelIds, channel.ChannelId)
+					}
+				}
+			}
+			resultsRegex, err := parallelSearchChannels(d, pCtx, channelNameRegexSearches, 10, d.channelsRegexSearchCache)
+			if err != nil {
+				return nil, fmt.Errorf("error looking up regex channels: %w", err)
+			}
+			for _, channels := range resultsRegex {
 				for _, channel := range channels {
 					// Any channels that are not a compatible data type, remove from query
 					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {
@@ -1003,7 +1026,14 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 					}
 				} else if channelRef.ChannelName != "" {
 					// If we have a channel name, search for matching channels
-					channels, err := d.getChannelsByName(pCtx, assetId, channelRef.ChannelName, channelRef.NameAsRegex)
+					var channels []Channel
+					var err error
+					if channelRef.NameAsRegex {
+						channels, err = d.channelsRegexSearchCache.GetOrWait(d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
+					} else {
+						channels, err = d.channelsNameSearchCache.GetOrWait(d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
+					}
+
 					if err != nil || channels == nil {
 						log.DefaultLogger.Warn("No matching channels found for reference search",
 							"assetId", assetId, "calculatedChannel", calcChannelQuery.Name, "channelReference", channelRef.ChannelReference, "searchTerm", channelRef.ChannelName, "asRegex", channelRef.NameAsRegex)
@@ -1143,11 +1173,11 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 }
 
 func parallelSearchChannels(
+	d *SiftDatasource,
 	pCtx backend.PluginContext,
 	channelSearchKeys []channelSearchKey,
-	asRegex bool,
 	maxParallel int,
-	channelSearchFunc func(pCtx backend.PluginContext, assetId string, channelName string, asRegex bool) ([]Channel, error),
+	cacheWithLoader *TypedCacheWithLoader[channelSearchKey, []Channel, string],
 ) (map[channelSearchKey][]Channel, error) {
 	g, _ := errgroup.WithContext(context.Background())
 	sem := make(chan struct{}, maxParallel)
@@ -1159,7 +1189,7 @@ func parallelSearchChannels(
 		g.Go(func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := channelSearchFunc(pCtx, key.assetId, key.searchTerm, asRegex)
+			result, err := cacheWithLoader.GetOrWait(d, pCtx, key)
 			if err != nil {
 				return err
 			}

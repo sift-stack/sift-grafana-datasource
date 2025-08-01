@@ -285,7 +285,6 @@ export const useFetchChannels = (
   const loadChannels = useCallback(
     async (assetIds: string[], searchTerm?: string, channelNames?: string[]): Promise<void> => {
       setLoading(true);
-      console.log('loadChannels', assetIds, searchTerm, channelNames);
       latestArgsRef.current = { assetIds, searchTerm, channelNames: channelNames };
       debouncedFetchChannels(assetIds, searchTerm, channelNames);
     },

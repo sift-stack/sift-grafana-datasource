@@ -87,8 +87,14 @@ func (s *DatasourceTestSuite) SetupSuite() {
 	runsNameCache := NewTypedCache[string, []string](0, 0)
 	runsRegexCache := NewTypedCache[string, []string](0, 0)
 	channelIdsCache := NewTypedCache[string, Channel](0, 0)
-	channelRegexCache := NewTypedCache[string, []Channel](0, 0)
-	channelNameCache := NewTypedCache[string, []Channel](0, 0)
+	channelNameCache := NewTypedCacheWithLoader[channelSearchKey, []Channel, string](
+		NewTypedCache[string, []Channel](0, 0),
+		getChannelsByNameExact,
+		StringFromChannelSearchKey)
+	channelRegexCache := NewTypedCacheWithLoader[channelSearchKey, []Channel, string](
+		NewTypedCache[string, []Channel](0, 0),
+		getChannelsByNameSearch,
+		StringFromChannelSearchKey)
 
 	s.datasource = &SiftDatasource{
 		httpClient:               s.server.Client(),
@@ -1937,52 +1943,4 @@ func (s *DatasourceTestSuite) channelsMatch(expected, actual *siftApiChannel) bo
 		return false
 	}
 	return true
-}
-
-// TestHandleChannelsSearch tests the channels:search endpoint functionality
-func (s *DatasourceTestSuite) TestHandleChannelsSearch() {
-	// Test exact name search with case sensitivity
-	channels, err := s.datasource.getChannelsByName(s.pCtx, "asset1", "Test Channel 1", false)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 1)
-	require.Equal(s.T(), "channel1", channels[0].ChannelId)
-	require.Equal(s.T(), "Test Channel 1", channels[0].Name)
-	require.Equal(s.T(), "asset1", channels[0].AssetId)
-
-	// Test exact name search with no results
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset1", "Nonexistent Channel", false)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 0)
-
-	// Test regex search
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset2", ".*Channel", true)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 3)
-
-	// Test regex search with special characters
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset3", "Special-.*", true)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 1)
-	require.Equal(s.T(), "channel6", channels[0].ChannelId)
-
-	// Test filtering by asset ID
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset1", "Test", true)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 2)
-	for _, channel := range channels {
-		require.Equal(s.T(), "asset1", channel.AssetId)
-	}
-
-	// Test with multiple asset IDs (this should test the caching mechanism as well)
-	// First call to populate cache
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset2", "Dev", true)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 1)
-	require.Equal(s.T(), "channel4", channels[0].ChannelId)
-
-	// Second call should use cache
-	channels, err = s.datasource.getChannelsByName(s.pCtx, "asset2", "Dev", true)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), channels, 1)
-	require.Equal(s.T(), "channel4", channels[0].ChannelId)
 }

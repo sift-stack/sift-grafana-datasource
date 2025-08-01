@@ -1026,7 +1026,7 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 					}
 				} else if channelRef.ChannelName != "" {
 					// If we have a channel name, search for matching channels
-					channels := make([]Channel, 0)
+					var channels []Channel
 					var err error
 					if channelRef.NameAsRegex {
 						channels, err = d.channelsRegexSearchCache.GetOrWait(d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})

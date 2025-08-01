@@ -98,8 +98,10 @@ func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backen
 	comparableKey := tc.keyToComparable(key)
 	value, found := tc.cache.Get(fmt.Sprintf("%v", comparableKey))
 	if found {
-		tc.mu.Unlock()
-		return value, nil
+		if typedValue, ok := value.(V); ok {
+			tc.mu.Unlock()
+			return typedValue, nil
+		}
 	}
 
 	// Check if we are already loading the value

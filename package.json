@@ -95,5 +95,8 @@
     "rxjs": "7.8.1",
     "tslib": "2.5.3"
   },
+  "overrides": {
+    "form-data": "^4.0.4"
+  },
   "packageManager": "npm@9.8.0"
 }

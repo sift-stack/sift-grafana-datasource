@@ -486,9 +486,8 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 		}
 
 		if len(queries) == 0 {
-			return nil, nil, fmt.Errorf("no matching channels found")
+			log.DefaultLogger.Debug("No channels found for query", "assetIds", assetIds, "runIds", runIds, "channelQueries", cdq.ChannelQueries)
 		}
-
 	}
 
 	return queries, calculatedChannelKeys, nil

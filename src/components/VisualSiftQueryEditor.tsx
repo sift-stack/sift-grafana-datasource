@@ -17,14 +17,27 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [loading, setLoading] = useState(true);
   const [queryMode, setQueryMode] = useState<QueryType>(QueryTypes.CHANNEL);
   const [lastQuery, setLastQuery] = useState<string>('');
+  const [initialRender, setInitialRender] = useState(true);
 
   const queryRef = useRef(query);
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
 
-  // Migrate legacy query if necessary
+  // After initial render, we will perform migrations. This ensures the component renders in Mixed Mode
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setInitialRender(false); // Trigger migration after initial render
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
+
+  useEffect(() => {
+    if (!loading || initialRender) {
+      return;
+    } // Only migrate once and after initial render
+
     async function migrateQuery() {
       // Only migrate if needed or if query has changed
       const migratedQuery = await datasource.migrateQuery(query);
@@ -42,7 +55,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
       setLoading(false);
     }
     void migrateQuery();
-  }, [query, datasource, onChange]); // Re-run when query changes
+  }, [query, datasource, onChange, initialRender, loading]); // Re-run when query changes
 
   const onUpdateQuery = useCallback(
     (query: SiftQuery) => {
@@ -73,7 +86,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
   );
 
   if (loading) {
-    return <div data-testid="loading-migration-placeholder" />;
+    return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
 
   return (

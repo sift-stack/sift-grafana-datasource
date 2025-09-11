@@ -7,9 +7,6 @@ import (
 )
 
 func (fv *floatValue) UnmarshalJSON(data []byte) error {
-	// Define an alias type to avoid infinite recursion
-	type Alias floatValue
-
 	// Create an intermediate struct with a raw message for the value
 	aux := struct {
 		Timestamp time.Time       `json:"timestamp"`
@@ -43,9 +40,6 @@ func (fv *floatValue) UnmarshalJSON(data []byte) error {
 }
 
 func (dv *doubleValue) UnmarshalJSON(data []byte) error {
-	// Define an alias type to avoid infinite recursion
-	type Alias doubleValue
-
 	// Create an intermediate struct with a raw message for the value
 	aux := struct {
 		Timestamp time.Time       `json:"timestamp"`

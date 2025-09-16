@@ -3,9 +3,11 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 // CheckHealth handles health checks sent from Grafana to the plugin.
@@ -36,7 +38,12 @@ func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealth
 			Message: fmt.Sprintf("error querying backend: %v", err.Error()),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.DefaultLogger.Error("error closing response body", "error", err)
+		}
+	}(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,

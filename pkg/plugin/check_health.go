@@ -36,7 +36,7 @@ func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealth
 			Message: fmt.Sprintf("error querying backend: %v", err.Error()),
 		}, nil
 	}
-
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,

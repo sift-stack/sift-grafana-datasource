@@ -38,8 +38,8 @@ func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealth
 			Message: fmt.Sprintf("error querying backend: %v", err.Error()),
 		}, nil
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+	defer func(body io.ReadCloser) {
+		err := body.Close()
 		if err != nil {
 			log.DefaultLogger.Error("error closing response body", "error", err)
 		}

@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: read
 
 on:
   push:
@@ -219,8 +221,8 @@ jobs:
       #     retention-days: 5
 
   publish-report:
-    if: ${{ always() && !cancelled() }}
-    needs: [playwright-tests]
+    if: ${{ always() && !cancelled() && needs.build.outputs.has-e2e == 'true' }}
+    needs: [build, playwright-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

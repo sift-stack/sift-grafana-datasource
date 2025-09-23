@@ -24,6 +24,21 @@ interface CacheEntry {
   fetchedIntervalMs: number;
 }
 
+// Detect an aborted request from Grafana runtime/fetch/observables
+function isAbortError(err: any): boolean {
+  if (!err) {
+    return false;
+  }
+  if (typeof err.status === 'number' && err.status === -1) {
+    return true;
+  }
+  if (err?.name === 'AbortError') {
+    return true;
+  }
+  const msg = typeof err === 'string' ? err : err?.message || '';
+  return typeof msg === 'string' && msg.toLowerCase().includes('aborted');
+}
+
 export class SiftDataSourceCache {
   private cache: Map<number, CacheEntry> = new Map();
 
@@ -83,17 +98,32 @@ export class SiftDataSourceCache {
         newIntervalMs !== cacheEntry.fetchedIntervalMs || // new resolution/sample frequency requested
         liveLookbackTime <= newFrom // all data is liveish
       ) {
-        const fullData = await firstValueFrom(fetchCallback(request));
+        try {
+          const fullData = await firstValueFrom(fetchCallback(request));
 
-        // Store in cache
-        this.cache.set(panelId, {
-          request,
-          response: fullData,
-          targetsKey: currentTargetsKey,
-          fetchedIntervalMs: request.intervalMs,
-        });
+          // Store in cache
+          this.cache.set(panelId, {
+            request,
+            response: fullData,
+            targetsKey: currentTargetsKey,
+            fetchedIntervalMs: request.intervalMs,
+          });
 
-        return fullData;
+          return fullData;
+        } catch (err) {
+          if (isAbortError(err)) {
+            const existing = this.cache.get(panelId);
+            if (existing) {
+              const fromTime = request.range.from.valueOf();
+              const toTime = request.range.to.valueOf();
+              return {
+                data: existing.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, fromTime, toTime)),
+              };
+            }
+            return { data: [] };
+          }
+          throw err;
+        }
       }
 
       // We have a cache with same targets/interval: figure out missing sub‑ranges
@@ -164,6 +194,10 @@ export class SiftDataSourceCache {
             );
           }
         } catch (error) {
+          if (isAbortError(error)) {
+            // Ignore aborted sub-range fetch; continue stitching with what we have
+            return;
+          }
           console.error(
             `Panel ${panelId} - Error fetching range ${new Date(rng.from).toISOString()} to ${new Date(
               rng.to
@@ -213,6 +247,17 @@ export class SiftDataSourceCache {
 
       return result;
     } catch (e) {
+      if (isAbortError(e)) {
+        const existing = this.cache.get(panelId);
+        if (existing) {
+          const fromTime = request.range.from.valueOf();
+          const toTime = request.range.to.valueOf();
+          return {
+            data: existing.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, fromTime, toTime)),
+          };
+        }
+        return { data: [] };
+      }
       console.error(`Panel ${panelId} - Failed to handle cache`, e);
       return await firstValueFrom(fetchCallback(request));
     }

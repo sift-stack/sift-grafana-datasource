@@ -69,11 +69,6 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 		return nil, err
 	}
 
-	// timeout of 60 seconds for Sift API queries
-	opts.Timeouts = &httpclient.TimeoutOptions{
-		Timeout: 60 * time.Second,
-	}
-
 	httpClient, err := httpclient.New(opts)
 	if err != nil {
 		return nil, err

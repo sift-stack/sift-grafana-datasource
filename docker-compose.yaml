@@ -11,7 +11,7 @@ services:
         grafana_image: ${GRAFANA_IMAGE:-grafana-enterprise}
         grafana_version: ${GRAFANA_VERSION:-11.0.0}
     ports:
-      - 3000:3000/tcp
+      - 3005:3000/tcp
     volumes:
       - ./dist:/var/lib/grafana/plugins/sift-grafana-datasource
       - ./provisioning:/etc/grafana/provisioning

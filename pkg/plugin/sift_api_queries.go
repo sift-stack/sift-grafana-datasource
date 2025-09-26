@@ -217,7 +217,7 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 		req := apiRequest{
 			pCtx:   pCtx,
 			method: "POST",
-			path:   "/api/v2/data",
+			path:   "/api/v2/internal/data",
 			body:   backendQuery,
 		}
 

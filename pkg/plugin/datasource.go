@@ -68,6 +68,7 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 	if err != nil {
 		return nil, err
 	}
+
 	httpClient, err := httpclient.New(opts)
 	if err != nil {
 		return nil, err

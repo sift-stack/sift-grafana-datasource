@@ -194,9 +194,13 @@ func handlePaginatedRequest[T any](
 
 		results = append(results, items...)
 
-		// If there's no next page nextPageToken, break out of the loop.
 		if nextPageToken == "" {
+			// If there's no nextPageToken, break out of the loop.
 			break
+		} else if i == maxPages-1 {
+			// If there is a nextPageToken but we've already hit our maxPages
+			// limit, return an error.
+			return nil, fmt.Errorf("query generated too many pages (>%d) of results, data has been dropped", maxPages)
 		}
 		params.Set("page_token", nextPageToken)
 	}

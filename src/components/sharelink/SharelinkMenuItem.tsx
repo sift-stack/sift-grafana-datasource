@@ -13,20 +13,38 @@ interface SharelinkMenuItemProps {
   className?: string;
 }
 
+function openLink(link: string) {
+  window.open(link, '_blank');
+}
+
 export const SharelinkMenuItem = ({ className, items: _items }: SharelinkMenuItemProps) => {
+  const testLink = 'https://google.com';
+
+  const copyToClipboard = async (value: string) => {
+    try {
+      await navigator.clipboard?.writeText(value);
+    } catch (err) {
+      console.error('Failed to copy link', err);
+    }
+  };
+
   return (
     <InlineLabel width="auto" transparent className={className} style={{ marginLeft: 'auto' }}>
       <WithContextMenu
         renderMenuItems={() => (
           <Menu.Group label="Open in Sift">
-            <Menu.Item label="Open Link" />
-            <Menu.Item label="Copy to Clipboard" />
+            <Menu.Item label="Open Link" onClick={() => openLink(testLink)} />
+            <Menu.Item label="Copy to Clipboard" onClick={() => void copyToClipboard(testLink)} />
           </Menu.Group>
         )}
       >
         {({ openMenu }) => (
           <Button
-            onClick={openMenu}
+            onClick={() => openLink(testLink)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              openMenu(event);
+            }}
             size="md"
             fill="text"
             variant="secondary"

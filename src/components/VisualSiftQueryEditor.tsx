@@ -92,7 +92,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
 
-  const shareLinkDefaultItems: ShareLinkItem[] = []
+  const shareLinkDefaultItems: ShareLinkItem[] = [{
+    assetId: "31553b56-b919-4cf7-be46-b399a318bc3c",
+    runId: '31553b56-b919-4cf7-be46-b399a318bc3c',
+    channelIds: ['ba08bdcb-ebfc-4949-9b9c-3550e02b63fb']
+
+  }]
 
   return (
     <div>

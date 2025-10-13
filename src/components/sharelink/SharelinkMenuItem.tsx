@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
+import { AppEvents } from '@grafana/data';
+import { getAppEvents } from '@grafana/runtime';
 import siftLogo from '../../img/logo.svg';
 import { getFrontendHostname } from './getFrontendHostname';
 
@@ -19,6 +21,8 @@ function openLink(link: string) {
   window.open(link, '_blank');
 }
 export const SharelinkMenuItem = ({ className, items: _items, apiBaseUrl }: SharelinkMenuItemProps) => {
+  const appEvents = useMemo(() => getAppEvents(), []);
+
   const shareLink = useMemo(() => {
     if (!apiBaseUrl) {
       return null;
@@ -34,7 +38,17 @@ export const SharelinkMenuItem = ({ className, items: _items, apiBaseUrl }: Shar
 
   const copyToClipboard = async (value: string) => {
     try {
-      await navigator.clipboard?.writeText(value);
+      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+        throw new Error('Clipboard API not available');
+      }
+
+      await navigator.clipboard.writeText(value);
+      if (appEvents) {
+        appEvents.publish({
+          type: AppEvents.alertSuccess.name,
+          payload: ['Copied Sift share link to clipboard'],
+        });
+      }
     } catch (err) {
       console.error('Failed to copy link', err);
     }

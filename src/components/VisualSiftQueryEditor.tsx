@@ -7,7 +7,7 @@ import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQue
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { ShareLinkItem, SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
@@ -92,6 +92,8 @@ export const VisualSiftQueryEditor = (props: Props) => {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
 
+  const shareLinkDefaultItems: ShareLinkItem[] = []
+
   return (
     <div>
       <InlineFieldRow>
@@ -118,7 +120,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem items={[]} apiBaseUrl={apiRestUrl} />
+        <SharelinkMenuItem items={shareLinkDefaultItems} apiBaseUrl={apiRestUrl} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

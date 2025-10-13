@@ -7,6 +7,7 @@ import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQue
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
+import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
@@ -115,6 +116,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
+        <SharelinkMenuItem></SharelinkMenuItem>
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

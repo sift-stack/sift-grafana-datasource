@@ -1,11 +1,18 @@
 import React from 'react';
 import { IconButton, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 
+export interface ShareLinkItem {
+  assetId?: string;
+  runId?: string;
+  channelIds: string[];
+}
+
 interface SharelinkMenuItemProps {
+  items: ShareLinkItem[];
   className?: string;
 }
 
-export const SharelinkMenuItem = ({ className }: SharelinkMenuItemProps) => {
+export const SharelinkMenuItem = ({ className, items: _items }: SharelinkMenuItemProps) => {
   return (
     <InlineLabel width="auto" transparent className={className} style={{ marginLeft: 'auto' }}>
       <WithContextMenu

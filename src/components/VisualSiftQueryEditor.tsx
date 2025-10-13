@@ -116,7 +116,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem></SharelinkMenuItem>
+        <SharelinkMenuItem items={[]} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

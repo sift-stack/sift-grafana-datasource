@@ -86,6 +86,8 @@ export const VisualSiftQueryEditor = (props: Props) => {
     [onUpdateQuery]
   );
 
+  const apiRestUrl = datasource.getApiRestUrl();
+
   if (loading) {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
@@ -116,7 +118,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem items={[]} />
+        <SharelinkMenuItem items={[]} apiBaseUrl={apiRestUrl} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

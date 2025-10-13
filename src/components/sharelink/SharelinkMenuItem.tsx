@@ -11,14 +11,14 @@ export interface ShareLinkItem {
 interface SharelinkMenuItemProps {
   items: ShareLinkItem[];
   className?: string;
+  apiBaseUrl?: string;
 }
 
 function openLink(link: string) {
   window.open(link, '_blank');
 }
-
-export const SharelinkMenuItem = ({ className, items: _items }: SharelinkMenuItemProps) => {
-  const testLink = 'https://google.com';
+export const SharelinkMenuItem = ({ className, items: _items, apiBaseUrl: _apiBaseUrl }: SharelinkMenuItemProps) => {
+  const sharelink = 'https://google.com';
 
   const copyToClipboard = async (value: string) => {
     try {
@@ -33,14 +33,14 @@ export const SharelinkMenuItem = ({ className, items: _items }: SharelinkMenuIte
       <WithContextMenu
         renderMenuItems={() => (
           <Menu.Group label="Open in Sift">
-            <Menu.Item label="Open Link" onClick={() => openLink(testLink)} />
-            <Menu.Item label="Copy to Clipboard" onClick={() => void copyToClipboard(testLink)} />
+            <Menu.Item label="Open Link" onClick={() => openLink(sharelink)} />
+            <Menu.Item label="Copy to Clipboard" onClick={() => void copyToClipboard(sharelink)} />
           </Menu.Group>
         )}
       >
         {({ openMenu }) => (
           <Button
-            onClick={() => openLink(testLink)}
+            onClick={() => openLink(sharelink)}
             onContextMenu={(event) => {
               event.preventDefault();
               openMenu(event);

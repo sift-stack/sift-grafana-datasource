@@ -9,11 +9,17 @@ import { ensureQueryDefaults, filterQueryBeforeRequest, replaceTemplateVariables
 
 export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSourceOptions> {
   cache: SiftDataSourceCache;
+  private readonly restApiUrl?: string;
 
   constructor(instanceSettings: DataSourceInstanceSettings<SiftDataSourceOptions>) {
     super(instanceSettings);
     this.variables = new SiftVariableSupport(this);
     this.cache = new SiftDataSourceCache();
+    this.restApiUrl = instanceSettings.jsonData?.url || instanceSettings.url;
+  }
+
+  getApiRestUrl(): string | undefined {
+    return this.restApiUrl;
   }
 
   clearCache(panelId?: number) {

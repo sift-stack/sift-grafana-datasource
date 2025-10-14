@@ -9,7 +9,7 @@ module.exports = {
   ...baseConfig,
   moduleNameMapper: {
     ...baseConfig.moduleNameMapper,
-    '\\.(svg)$': '<rootDir>/jest/mocks/svgMock.ts',
+    '\\.(svg)$': '<rootDir>/jest/mocks/svgMock.js',
   },
   // Increase default timeout for all tests to 15 seconds
   testTimeout: 15000,

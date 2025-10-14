@@ -13,6 +13,8 @@ jest.mock('./query-editor/QueryEditor', () => ({
 // Create a mock for the datasource
 const createMockDatasource = () => ({
   migrateQuery: jest.fn(),
+  getApiRestUrl: jest.fn(() => 'https://sift.example.com'),
+  clearCache: jest.fn(),
 });
 
 describe('VisualSiftQueryEditor', () => {

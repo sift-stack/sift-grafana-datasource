@@ -7,7 +7,7 @@ import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQue
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { ShareLinkItem, SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
@@ -121,12 +121,18 @@ export const VisualSiftQueryEditor = (props: Props) => {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
 
-  const shareLinkDefaultItems: ShareLinkItem[] = [{
-    assetId: "31553b56-b919-4cf7-be46-b399a318bc3c",
-    runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
-    channelIds: ['ba08bdcb-ebfc-4949-9b9c-3550e02b63fb', '101e00f1-d49c-418e-9d5e-67d0edf40a71']
-
-  }]
+  const shareLinkDefaultItems: Array<{ channelId: string; assetId?: string; runId?: string }> = [
+    {
+      assetId: '31553b56-b919-4cf7-be46-b399a318bc3c',
+      runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
+      channelId: 'ba08bdcb-ebfc-4949-9b9c-3550e02b63fb',
+    },
+    {
+      assetId: '31553b56-b919-4cf7-be46-b399a318bc3c',
+      runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
+      channelId: '101e00f1-d49c-418e-9d5e-67d0edf40a71',
+    },
+  ];
 
   return (
     <div>

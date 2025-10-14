@@ -56,35 +56,39 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
     }
 
     const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
-    const [firstChannelId] = firstItem.channelIds;
-    if (!firstChannelId) {
+    const channelIds = (firstItem.channelIds ?? []).filter((channelId): channelId is string => Boolean(channelId));
+    if (channelIds.length === 0) {
       return {
         shareLink: null,
         disabledReason: 'Select a channel to enable share links',
       };
     }
 
-    const channelKey = 'channel-key-1';
+    const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);
+    const legendChannels: LegendConfigPayload['channels'] = {};
+    channelIds.forEach((channelId, index) => {
+      const channelKey = channelKeys[index];
+      legendChannels[channelKey] = {
+        channelId,
+        visible: true,
+        // color: '#3d58ff',
+        showTooltip: true,
+      };
+    });
+
     const legend: LegendConfigPayload = {
       left: ['y-axis-1'],
       right: [],
       bottom: ['x-axis-1'],
       axes: {
-        'y-axis-1': [channelKey],
-        'x-axis-1': [channelKey],
+        'y-axis-1': channelKeys,
+        'x-axis-1': channelKeys,
       },
       xAxes: {},
-      channels: {
-        [channelKey]: {
-          channelId: firstChannelId,
-          visible: true,
-          // color: '#3d58ff',
-          showTooltip: true,
-        },
-      },
+      channels: legendChannels,
       stringChannelKeys: [],
       axesRunLookup: {},
-    } as const;
+    };
 
     const assets = firstItem.assetId ? [firstItem.assetId] : undefined;
     const runs = firstItem.runId ? [firstItem.runId] : undefined;

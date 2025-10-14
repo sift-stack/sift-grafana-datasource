@@ -94,7 +94,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
 
   const shareLinkDefaultItems: ShareLinkItem[] = [{
     assetId: "31553b56-b919-4cf7-be46-b399a318bc3c",
-    runId: '31553b56-b919-4cf7-be46-b399a318bc3c',
+    runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
     channelIds: ['ba08bdcb-ebfc-4949-9b9c-3550e02b63fb']
 
   }]

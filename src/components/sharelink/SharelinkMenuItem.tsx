@@ -4,6 +4,8 @@ import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import siftLogo from '../../img/logo.svg';
 import { getFrontendHostname } from './getFrontendHostname';
+import { createExplorerLink } from './generate';
+import type { LegendConfigPayload } from './generate';
 
 export interface ShareLinkItem {
   assetId?: string;
@@ -18,13 +20,19 @@ interface SharelinkMenuItemProps {
 }
 
 function openLink(link: string) {
+  console.log('link to open: ', link)
   window.open(link, '_blank');
 }
-export const SharelinkMenuItem = ({ className, items: _items, apiBaseUrl }: SharelinkMenuItemProps) => {
+export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMenuItemProps) => {
   const appEvents = useMemo(() => getAppEvents(), []);
 
   const shareLink = useMemo(() => {
-    if (!apiBaseUrl) {
+    if (!apiBaseUrl || !items.length) {
+      return null;
+    }
+
+    const firstItem = items[0];
+    if (!firstItem || !firstItem.channelIds || firstItem.channelIds.length === 0) {
       return null;
     }
 
@@ -33,8 +41,44 @@ export const SharelinkMenuItem = ({ className, items: _items, apiBaseUrl }: Shar
       return null;
     }
 
-    return hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
-  }, [apiBaseUrl]);
+    const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
+    const [firstChannelId] = firstItem.channelIds;
+    if (!firstChannelId) {
+      return null;
+    }
+
+    const channelKey = 'channel-key-1';
+    const legend: LegendConfigPayload = {
+      left: ['y-axis-1'],
+      right: [],
+      bottom: ['x-axis-1'],
+      axes: {
+        'y-axis-1': [channelKey],
+        'x-axis-1': [channelKey],
+      },
+      xAxes: {},
+      channels: {
+        [channelKey]: {
+          channelId: firstChannelId,
+          visible: true,
+          color: '#3d58ff',
+          showTooltip: true,
+        },
+      },
+      stringChannelKeys: [],
+      axesRunLookup: {},
+    } as const;
+
+    const assets = firstItem.assetId ? [firstItem.assetId] : undefined;
+    const runs = firstItem.runId ? [firstItem.runId] : undefined;
+
+    return createExplorerLink({
+      origin,
+      assets,
+      runs,
+      legend,
+    });
+  }, [apiBaseUrl, items]);
 
   const copyToClipboard = async (value: string) => {
     try {

@@ -17,6 +17,7 @@ interface SharelinkMenuItemProps {
 }
 
 function openLink(link: string) {
+  console.log('opening sift link: ', link)
   window.open(link, '_blank');
 }
 export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMenuItemProps) => {

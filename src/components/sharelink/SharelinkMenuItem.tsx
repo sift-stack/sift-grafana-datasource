@@ -4,8 +4,7 @@ import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import siftLogo from '../../img/logo.svg';
 import { getFrontendHostname } from './getFrontendHostname';
-import { createExplorerLink } from './generate';
-import type { LegendConfigPayload } from './generate';
+import { createExplorerLink, type LegendConfigPayload } from './generate';
 
 export interface ShareLinkItem {
   assetId?: string;
@@ -20,31 +19,49 @@ interface SharelinkMenuItemProps {
 }
 
 function openLink(link: string) {
-  console.log('link to open: ', link)
   window.open(link, '_blank');
 }
 export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMenuItemProps) => {
   const appEvents = useMemo(() => getAppEvents(), []);
 
-  const shareLink = useMemo(() => {
-    if (!apiBaseUrl || !items.length) {
-      return null;
+  const { shareLink, disabledReason } = useMemo(() => {
+    if (!apiBaseUrl) {
+      return {
+        shareLink: null,
+        disabledReason: "Configure the Sift API REST URL to enable share links",
+      };
+    }
+
+    if (!items.length) {
+      return {
+        shareLink: null,
+        disabledReason: 'Select an asset, run, and channel to enable share links',
+      };
     }
 
     const firstItem = items[0];
     if (!firstItem || !firstItem.channelIds || firstItem.channelIds.length === 0) {
-      return null;
+      return {
+        shareLink: null,
+        disabledReason: 'Select a channel to enable share links',
+      };
     }
 
     const hostname = getFrontendHostname(apiBaseUrl);
     if (!hostname) {
-      return null;
+      return {
+        shareLink: null,
+        disabledReason: 'Configure the Sift API REST URL to enable share links',
+      };
     }
 
     const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
     const [firstChannelId] = firstItem.channelIds;
     if (!firstChannelId) {
-      return null;
+      return {
+        shareLink: null,
+        disabledReason: 'Select a channel to enable share links',
+      };
     }
 
     const channelKey = 'channel-key-1';
@@ -72,12 +89,15 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
     const assets = firstItem.assetId ? [firstItem.assetId] : undefined;
     const runs = firstItem.runId ? [firstItem.runId] : undefined;
 
-    return createExplorerLink({
-      origin,
-      assets,
-      runs,
-      legend,
-    });
+    return {
+      shareLink: createExplorerLink({
+        origin,
+        assets,
+        runs,
+        legend,
+      }),
+      disabledReason: undefined,
+    };
   }, [apiBaseUrl, items]);
 
   const copyToClipboard = async (value: string) => {
@@ -145,7 +165,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
             tooltip={
               shareLink
                 ? "Open this query in Sift's explorer view"
-                : "Configure the Sift API REST URL to enable share links"
+                : disabledReason ?? 'Share link unavailable'
             }
           >
             <img src={siftLogo} alt="Sift" style={{ width: 20, height: 20 }} />

@@ -11,7 +11,7 @@ type DatazoomTuple = [number, number];
 
 type LegendChannelConfigPayload = {
   visible: boolean;
-  color: string;
+  color?: string;
   showTooltip: boolean;
   channelId?: string;
   bitfieldElementConfig?: unknown;

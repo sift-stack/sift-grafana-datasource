@@ -86,6 +86,35 @@ export const VisualSiftQueryEditor = (props: Props) => {
     [onUpdateQuery]
   );
 
+  useEffect(() => {
+    const series = data?.series ?? [];
+    const seen = new Set<string>();
+    const channels: Array<{ channelId: string; assetId?: string; runId?: string }> = [];
+
+    for (const frame of series) {
+      for (const field of frame.fields ?? []) {
+        const labels = field.labels ?? {};
+        const channelId = labels.channel_id as string | undefined;
+        if (!channelId) {
+          continue;
+        }
+        const assetId = labels.asset_id as string | undefined;
+        const runId = labels.run_id as string | undefined;
+        const key = `${channelId}|${assetId ?? ''}|${runId ?? ''}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          channels.push({ channelId, assetId, runId });
+        }
+      }
+    }
+
+    if (channels.length > 0) {
+      console.log('Sift query channels', channels);
+    } else if (series.length > 0) {
+      console.log('Sift query channels: no channel_id labels found');
+    }
+  }, [data, query]);
+
   const apiRestUrl = datasource.getApiRestUrl();
 
   if (loading) {
@@ -95,7 +124,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const shareLinkDefaultItems: ShareLinkItem[] = [{
     assetId: "31553b56-b919-4cf7-be46-b399a318bc3c",
     runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
-    channelIds: ['ba08bdcb-ebfc-4949-9b9c-3550e02b63fb']
+    channelIds: ['ba08bdcb-ebfc-4949-9b9c-3550e02b63fb', '101e00f1-d49c-418e-9d5e-67d0edf40a71']
 
   }]
 

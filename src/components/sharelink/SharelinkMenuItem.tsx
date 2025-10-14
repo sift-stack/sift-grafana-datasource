@@ -78,7 +78,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
         [channelKey]: {
           channelId: firstChannelId,
           visible: true,
-          color: '#3d58ff',
+          // color: '#3d58ff',
           showTooltip: true,
         },
       },

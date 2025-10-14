@@ -19,6 +19,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [queryMode, setQueryMode] = useState<QueryType>(QueryTypes.CHANNEL);
   const [lastQuery, setLastQuery] = useState<string>('');
   const [initialRender, setInitialRender] = useState(true);
+  const [shareLinkItems, setShareLinkItems] = useState<Array<{ channelId: string; assetId?: string; runId?: string }>>([]);
 
   const queryRef = useRef(query);
   useEffect(() => {
@@ -113,6 +114,8 @@ export const VisualSiftQueryEditor = (props: Props) => {
     } else if (series.length > 0) {
       console.log('Sift query channels: no channel_id labels found');
     }
+
+    setShareLinkItems(channels);
   }, [data, query]);
 
   const apiRestUrl = datasource.getApiRestUrl();
@@ -160,7 +163,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem items={shareLinkDefaultItems} apiBaseUrl={apiRestUrl} />
+        <SharelinkMenuItem items={shareLinkItems} apiBaseUrl={apiRestUrl} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

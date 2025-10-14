@@ -1,10 +1,10 @@
 /**
  * Utility for generating Explorer view links that the legacy explorer page
  * understands. This mirrors the URL encoding handled by
- * `explorePageUrlSync` (web-app/src/store/exploreSlice/exploreSlice.syncer.ts).
+ * `explorePageUrlSync`.
  */
 
-// Node typings are not guaranteed in this scratch file, so declare Buffer for TS.
+// Node typings are not guaranteed, so declare Buffer for TS.
 declare const Buffer: undefined | { from(data: string, encoding: string): { toString(encoding: string): string } };
 
 type DatazoomTuple = [number, number];

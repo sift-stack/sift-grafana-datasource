@@ -91,6 +91,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
     const series = data?.series ?? [];
     const seen = new Set<string>();
     const channels: Array<{ channelId: string; assetId?: string; runId?: string }> = [];
+    const debugLog = false
 
     for (const frame of series) {
       for (const field of frame.fields ?? []) {
@@ -108,11 +109,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
         }
       }
     }
-
-    if (channels.length > 0) {
-      console.log('Sift query channels', channels);
-    } else if (series.length > 0) {
-      console.log('Sift query channels: no channel_id labels found');
+    if (debugLog) {
+      if (channels.length > 0) {
+        console.log('Sift query channels', channels);
+      } else if (series.length > 0) {
+        console.log('Sift query channels: no channel_id labels found');
+      }
     }
 
     setShareLinkItems(channels);
@@ -123,19 +125,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
   if (loading) {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
-
-  const shareLinkDefaultItems: Array<{ channelId: string; assetId?: string; runId?: string }> = [
-    {
-      assetId: '31553b56-b919-4cf7-be46-b399a318bc3c',
-      runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
-      channelId: 'ba08bdcb-ebfc-4949-9b9c-3550e02b63fb',
-    },
-    {
-      assetId: '31553b56-b919-4cf7-be46-b399a318bc3c',
-      runId: '5727d0c8-b485-46f7-b228-d934e20ce5be',
-      channelId: '101e00f1-d49c-418e-9d5e-67d0edf40a71',
-    },
-  ];
 
   return (
     <div>

@@ -6,12 +6,14 @@ import siftLogo from '../../img/logo.svg';
 import { getFrontendHostname } from './getFrontendHostname';
 import { createExplorerLink, type LegendConfigPayload } from './generate';
 
+export interface SharelinkItems {
+  channelIds: string[];
+  assetIds?: string[];
+  runIds?: string[];
+}
+
 interface SharelinkMenuItemProps {
-  items: Array<{
-    channelId: string;
-    assetId?: string;
-    runId?: string;
-  }>;
+  items?: SharelinkItems;
   className?: string;
   apiBaseUrl?: string;
 }
@@ -31,7 +33,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
       };
     }
 
-    if (!items.length) {
+    if (!items || !items.channelIds || items.channelIds.length === 0) {
       return {
         shareLink: null,
         disabledReason: 'Select a channel to enable share links',
@@ -47,15 +49,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
     }
 
     const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
-    const validItems = items.filter((item) => Boolean(item?.channelId));
-    const channelIds = validItems.map((item) => item.channelId);
-    if (channelIds.length === 0) {
-      return {
-        shareLink: null,
-        disabledReason: 'Select a channel to enable share links',
-      };
-    }
-
+    const channelIds = items.channelIds;
     const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);
     const legendChannels: LegendConfigPayload['channels'] = {};
     channelIds.forEach((channelId, index) => {
@@ -82,19 +76,8 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
       axesRunLookup: {},
     };
 
-    const assetsSet = new Set<string>();
-    const runsSet = new Set<string>();
-    validItems.forEach((item) => {
-      if (item.assetId) {
-        assetsSet.add(item.assetId);
-      }
-      if (item.runId) {
-        runsSet.add(item.runId);
-      }
-    });
-
-    const assets = assetsSet.size > 0 ? Array.from(assetsSet) : undefined;
-    const runs = runsSet.size > 0 ? Array.from(runsSet) : undefined;
+    const assets = items.assetIds && items.assetIds.length > 0 ? items.assetIds : undefined;
+    const runs = items.runIds && items.runIds.length > 0 ? items.runIds : undefined;
 
     return {
       shareLink: createExplorerLink({

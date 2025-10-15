@@ -15,6 +15,7 @@ const createMockDatasource = () => ({
   migrateQuery: jest.fn(),
   getApiRestUrl: jest.fn(() => 'https://sift.example.com'),
   clearCache: jest.fn(),
+  postResource: jest.fn().mockResolvedValue(undefined),
 });
 
 describe('VisualSiftQueryEditor', () => {

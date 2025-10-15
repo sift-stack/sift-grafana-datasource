@@ -42,11 +42,11 @@ describe('SharelinkMenuItem', () => {
   it('creates explorer link with legend entries for all channels', () => {
     const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
 
-    const items = [
-      { channelId: 'channel-1', assetId: 'asset-1', runId: 'run-1' },
-      { channelId: 'channel-2', assetId: 'asset-1', runId: 'run-1' },
-      { channelId: 'channel-3', assetId: 'asset-2', runId: 'run-2' },
-    ];
+    const items = {
+      channelIds: ['channel-1', 'channel-2', 'channel-3'],
+      assetIds: ['asset-1', 'asset-2'],
+      runIds: ['run-1', 'run-2'],
+    };
 
     render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
 
@@ -75,7 +75,7 @@ describe('SharelinkMenuItem', () => {
   it('disables share actions when API base URL is not configured', async () => {
     const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
 
-    const items = [{ channelId: 'channel-1', assetId: 'asset-1', runId: 'run-1' }];
+    const items = { channelIds: ['channel-1'], assetIds: ['asset-1'], runIds: ['run-1'] };
 
     render(<SharelinkMenuItem items={items} apiBaseUrl={undefined} />);
 

@@ -7,7 +7,7 @@ import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQue
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { SharelinkMenuItem, SharelinkItems } from './sharelink/SharelinkMenuItem';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
@@ -19,7 +19,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [queryMode, setQueryMode] = useState<QueryType>(QueryTypes.CHANNEL);
   const [lastQuery, setLastQuery] = useState<string>('');
   const [initialRender, setInitialRender] = useState(true);
-  const [shareLinkItems, setShareLinkItems] = useState<Array<{ channelId: string; assetId?: string; runId?: string }>>([]);
+  const [shareLinkItems, setShareLinkItems] = useState<SharelinkItems | undefined>();
 
   const queryRef = useRef(query);
   useEffect(() => {
@@ -88,40 +88,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
   );
 
   useEffect(() => {
-    const series = data?.series ?? [];
-    const seen = new Set<string>();
-    const channels: Array<{ channelId: string; assetId?: string; runId?: string }> = [];
-    const debugLog = false; //yes
-
-    for (const frame of series) {
-      for (const field of frame.fields ?? []) {
-        const labels = field.labels ?? {};
-        const channelId = labels.channel_id as string | undefined;
-        if (!channelId) {
-          continue;
-        }
-        const assetId = labels.asset_id as string | undefined;
-        const runId = labels.run_id as string | undefined;
-        const key = `${channelId}|${assetId ?? ''}|${runId ?? ''}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          channels.push({ channelId, assetId, runId });
-        }
-      }
-    }
-
-    if (debugLog) {
-      if (channels.length > 0) {
-        console.log('Sift query channels', channels);
-      } else if (series.length > 0) {
-        console.log('Sift query channels: no channel_id labels found');
-      }
-    }
-
-    setShareLinkItems(channels);
-  }, [data, query]);
-
-  useEffect(() => {
     if (loading) {
       return;
     }
@@ -130,11 +96,16 @@ export const VisualSiftQueryEditor = (props: Props) => {
       const resourcePath = 'resolve-query-to-sift-metadata';
       const latestQuery = queryRef.current;
       try {
-        const response = await datasource.postResource<unknown>(resourcePath, latestQuery);
+        const response = await datasource.postResource<SharelinkItems>(resourcePath, latestQuery);
         console.log('resolveQueryToSiftMetadata', response);
-
+        if (response && Array.isArray(response.channelIds) && response.channelIds.length > 0) {
+          setShareLinkItems(response);
+        } else {
+          setShareLinkItems(undefined);
+        }
       } catch (error) {
         console.error('resolveQueryToSiftMetadata failed', error);
+        setShareLinkItems(undefined);
       }
     };
 

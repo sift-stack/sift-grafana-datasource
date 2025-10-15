@@ -1944,3 +1944,121 @@ func (s *DatasourceTestSuite) channelsMatch(expected, actual *siftApiChannel) bo
 	}
 	return true
 }
+
+func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
+	testCases := []struct {
+		name        string
+		input       queryModel
+		expect      queryMetadata
+		expectError string
+	}{
+		{
+			name: "simple channel lookup",
+			input: queryModel{
+				ChannelDataQueries: []channelDataQuery{
+					{
+						AssetQueries: []assetQuery{
+							{AssetName: "Test Asset 1"},
+						},
+						RunQueries: []runQuery{
+							{RunName: "Test Run 1"},
+						},
+						ChannelQueries: []channelQuery{
+							{ChannelName: "Test Channel 1"},
+						},
+					},
+				},
+			},
+			expect: queryMetadata{
+				AssetIDs:   []string{"asset1"},
+				RunIDs:     []string{"run1"},
+				ChannelIDs: []string{"channel1"},
+			},
+		},
+		{
+			name: "regex channel lookup",
+			input: queryModel{
+				ChannelDataQueries: []channelDataQuery{
+					{
+						AssetQueries: []assetQuery{
+							{AssetName: "Test Asset 1"},
+						},
+						ChannelQueries: []channelQuery{
+							{ChannelName: "Test Channel .*", NameAsRegex: true},
+						},
+					},
+				},
+			},
+			expect: queryMetadata{
+				AssetIDs:   []string{"asset1"},
+				ChannelIDs: []string{"channel1", "channel2"},
+				RunIDs:     []string{},
+			},
+		},
+		{
+			name: "calculated channel references",
+			input: func() queryModel {
+				refs := []channelReferenceQuery{
+					{ChannelReference: "$1"},
+					{ChannelReference: "$2"},
+				}
+				refs[0].ChannelId = "channel1"
+				refs[1].ChannelName = "Test Channel 2"
+
+				return queryModel{
+					ChannelDataQueries: []channelDataQuery{
+						{
+							AssetQueries: []assetQuery{
+								{AssetId: "asset1"},
+							},
+							CalculatedChannelQueries: []calculatedChannelQuery{
+								{
+									Name:              "Calculated",
+									Expression:        "$1 + $2",
+									ChannelReferences: refs,
+								},
+							},
+						},
+					},
+				}
+			}(),
+			expect: queryMetadata{
+				AssetIDs:   []string{"asset1"},
+				ChannelIDs: []string{"channel1", "channel2"},
+				RunIDs:     []string{},
+			},
+		},
+		{
+			name: "missing assets",
+			input: queryModel{
+				ChannelDataQueries: []channelDataQuery{
+					{
+						AssetQueries: []assetQuery{
+							{AssetName: "Unknown Asset"},
+						},
+						ChannelQueries: []channelQuery{
+							{ChannelName: "Test Channel 1"},
+						},
+					},
+				},
+			},
+			expectError: "no assets found",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			metadata, err := generateQueryMetadata(s.pCtx, tc.input, s.datasource)
+			if tc.expectError != "" {
+				s.Error(err)
+				s.Contains(err.Error(), tc.expectError)
+				return
+			}
+
+			s.NoError(err)
+			s.Equal(tc.expect.AssetIDs, metadata.AssetIDs)
+			s.Equal(tc.expect.RunIDs, metadata.RunIDs)
+			s.Equal(tc.expect.ChannelIDs, metadata.ChannelIDs)
+		})
+	}
+}

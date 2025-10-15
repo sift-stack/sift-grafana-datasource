@@ -171,15 +171,32 @@ func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallRe
 func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	log.DefaultLogger.Debug("resolveQueryToSiftMetadata request", "body", string(req.Body))
 
-	response := struct {
-		Message string          `json:"message"`
-		Query   json.RawMessage `json:"query"`
-	}{
-		Message: "hello world",
-		Query:   json.RawMessage(req.Body),
+	queryModel, err := convertQueryIfNeeded(json.RawMessage(req.Body))
+	if err != nil {
+		log.DefaultLogger.Error("resolveQueryToSiftMetadata convert error", "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusBadRequest,
+			Body:   []byte(fmt.Sprintf("parse query: %s", err)),
+		})
 	}
 
-	body, err := json.Marshal(response)
+	metadata, err := generateQueryMetadata(req.PluginContext, *queryModel, d)
+	if err != nil {
+		log.DefaultLogger.Error("resolveQueryToSiftMetadata metadata error", "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusBadRequest,
+			Body:   []byte(fmt.Sprintf("generate metadata: %s", err)),
+		})
+	}
+
+	log.DefaultLogger.Debug(
+		"resolveQueryToSiftMetadata summary",
+		"assetIds", metadata.AssetIDs,
+		"runIds", metadata.RunIDs,
+		"channelIds", metadata.ChannelIDs,
+	)
+
+	body, err := json.Marshal(metadata)
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,

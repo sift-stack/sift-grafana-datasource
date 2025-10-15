@@ -91,7 +91,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
     const series = data?.series ?? [];
     const seen = new Set<string>();
     const channels: Array<{ channelId: string; assetId?: string; runId?: string }> = [];
-    const debugLog = true;
+    const debugLog = false; //yes
 
     for (const frame of series) {
       for (const field of frame.fields ?? []) {

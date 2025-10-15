@@ -361,6 +361,12 @@ type channelSearchKey struct {
 	searchTerm string
 }
 
+type queryMetadata struct {
+	AssetIDs   []string `json:"assetIds"`
+	RunIDs     []string `json:"runIds"`
+	ChannelIDs []string `json:"channelIds"`
+}
+
 func getApiUrl(dataSourceInstanceSettings *backend.DataSourceInstanceSettings) (*url.URL, error) {
 	jsonData := jsonData{}
 	err := json.Unmarshal(dataSourceInstanceSettings.JSONData, &jsonData)
@@ -495,6 +501,256 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 	}
 
 	return queries, calculatedChannelKeys, nil
+}
+
+func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasource) (queryMetadata, error) {
+	assetIDSet := make(map[string]struct{})
+	runIDSet := make(map[string]struct{})
+	channelIDSet := make(map[string]struct{})
+
+	validDataTypes := make(map[string]struct{}, len(ValidSiftGrafanaDataTypes))
+	for _, dataType := range ValidSiftGrafanaDataTypes {
+		validDataTypes[dataType] = struct{}{}
+	}
+
+	for _, cdq := range fqm.ChannelDataQueries {
+		assetIds := []string{}
+		assetIdQueries := []string{}
+
+		for _, assetQuery := range cdq.AssetQueries {
+			if assetQuery.AssetId != "" {
+				assetIdQueries = append(assetIdQueries, assetQuery.AssetId)
+			} else if assetQuery.AssetName != "" {
+				foundAssetIds, err := d.getAssetIdsByName(pCtx, assetQuery.AssetName, assetQuery.NameAsRegex)
+				if err != nil {
+					return queryMetadata{}, fmt.Errorf("error looking up assets: %w", err)
+				}
+				assetIds = append(assetIds, foundAssetIds...)
+			}
+		}
+
+		validAssetIds, err := d.getValidAssetsById(pCtx, assetIdQueries)
+		if err != nil {
+			return queryMetadata{}, fmt.Errorf("error looking up assets: %w", err)
+		}
+		assetIds = append(assetIds, validAssetIds...)
+
+		if len(assetIds) == 0 {
+			return queryMetadata{}, fmt.Errorf("no assets found for query: %v", assetIdQueries)
+		}
+
+		assetIDsForRuns := uniqueStrings(assetIds)
+		for _, assetId := range assetIDsForRuns {
+			assetIDSet[assetId] = struct{}{}
+		}
+
+		runIds := []string{}
+		runIdQueries := []string{}
+
+		for _, runQuery := range cdq.RunQueries {
+			if runQuery.RunId != "" {
+				runIdQueries = append(runIdQueries, runQuery.RunId)
+			} else if runQuery.RunName != "" {
+				foundRunIds, err := d.getRunIdsByName(pCtx, assetIDsForRuns, runQuery.RunName, runQuery.NameAsRegex)
+				if err != nil {
+					return queryMetadata{}, fmt.Errorf("error looking up runs: %w", err)
+				}
+				runIds = append(runIds, foundRunIds...)
+			}
+		}
+
+		validRunIds, err := d.getValidRunsById(pCtx, runIdQueries)
+		if err != nil {
+			return queryMetadata{}, fmt.Errorf("error looking up runs: %w", err)
+		}
+		runIds = append(runIds, validRunIds...)
+
+		for _, runId := range uniqueStrings(runIds) {
+			runIDSet[runId] = struct{}{}
+		}
+
+		if len(cdq.ChannelQueries) > 0 {
+			if err := collectChannelIDsFromChannelQueries(pCtx, cdq, assetIDsForRuns, d, validDataTypes, channelIDSet); err != nil {
+				return queryMetadata{}, err
+			}
+		}
+
+		if len(cdq.CalculatedChannelQueries) > 0 {
+			if err := collectChannelIDsFromCalculatedQueries(pCtx, cdq, assetIDsForRuns, d, validDataTypes, channelIDSet); err != nil {
+				return queryMetadata{}, err
+			}
+		}
+	}
+
+	metadata := queryMetadata{
+		AssetIDs:   sortedKeys(assetIDSet),
+		RunIDs:     sortedKeys(runIDSet),
+		ChannelIDs: sortedKeys(channelIDSet),
+	}
+
+	return metadata, nil
+}
+
+func collectChannelIDsFromChannelQueries(
+	pCtx backend.PluginContext,
+	cdq channelDataQuery,
+	assetIDs []string,
+	d *SiftDatasource,
+	validDataTypes map[string]struct{},
+	channelIDSet map[string]struct{},
+) error {
+	channelIdQueries := []string{}
+
+	for _, channelQuery := range cdq.ChannelQueries {
+		if channelQuery.ChannelId != "" {
+			channelIdQueries = append(channelIdQueries, channelQuery.ChannelId)
+			continue
+		}
+
+		if channelQuery.ChannelName == "" {
+			continue
+		}
+
+		exactSearches := []channelSearchKey{}
+		regexSearches := []channelSearchKey{}
+
+		for _, assetId := range assetIDs {
+			if assetId == "" {
+				continue
+			}
+			key := channelSearchKey{assetId: assetId, searchTerm: channelQuery.ChannelName}
+			if channelQuery.NameAsRegex {
+				regexSearches = append(regexSearches, key)
+			} else {
+				exactSearches = append(exactSearches, key)
+			}
+		}
+
+		if len(exactSearches) > 0 {
+			resultsExact, err := parallelSearchChannels(d, pCtx, exactSearches, 10, d.channelsNameSearchCache)
+			if err != nil {
+				return fmt.Errorf("error looking up exact channels: %w", err)
+			}
+			for _, channels := range resultsExact {
+				addNamedChannelsToSet(channels, validDataTypes, channelIDSet)
+			}
+		}
+
+		if len(regexSearches) > 0 {
+			resultsRegex, err := parallelSearchChannels(d, pCtx, regexSearches, 10, d.channelsRegexSearchCache)
+			if err != nil {
+				return fmt.Errorf("error looking up regex channels: %w", err)
+			}
+			for _, channels := range resultsRegex {
+				addNamedChannelsToSet(channels, validDataTypes, channelIDSet)
+			}
+		}
+	}
+
+	if len(channelIdQueries) > 0 {
+		channels, err := d.getChannelsById(pCtx, channelIdQueries)
+		if err != nil {
+			return fmt.Errorf("error looking up channels: %w", err)
+		}
+		for _, channel := range channels {
+			channelIDSet[channel.ChannelId] = struct{}{}
+		}
+	}
+
+	return nil
+}
+
+func collectChannelIDsFromCalculatedQueries(
+	pCtx backend.PluginContext,
+	cdq channelDataQuery,
+	assetIDs []string,
+	d *SiftDatasource,
+	validDataTypes map[string]struct{},
+	channelIDSet map[string]struct{},
+) error {
+	for _, calcChannelQuery := range cdq.CalculatedChannelQueries {
+		if calcChannelQuery.Expression == "" || len(calcChannelQuery.ChannelReferences) == 0 {
+			continue
+		}
+
+		for _, channelRef := range calcChannelQuery.ChannelReferences {
+			if channelRef.ChannelId != "" {
+				channels, err := d.getChannelsById(pCtx, []string{channelRef.ChannelId})
+				if err != nil {
+					return fmt.Errorf("error looking up channels: %w", err)
+				}
+				for _, channel := range channels {
+					channelIDSet[channel.ChannelId] = struct{}{}
+				}
+				continue
+			}
+
+			if channelRef.ChannelName == "" {
+				continue
+			}
+
+			for _, assetId := range assetIDs {
+				if assetId == "" {
+					continue
+				}
+
+				key := channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName}
+				var (
+					channels []Channel
+					err      error
+				)
+				if channelRef.NameAsRegex {
+					channels, err = d.channelsRegexSearchCache.GetOrWait(d, pCtx, key)
+				} else {
+					channels, err = d.channelsNameSearchCache.GetOrWait(d, pCtx, key)
+				}
+				if err != nil {
+					return fmt.Errorf("error looking up channels: %w", err)
+				}
+				addNamedChannelsToSet(channels, validDataTypes, channelIDSet)
+			}
+		}
+	}
+
+	return nil
+}
+
+func addNamedChannelsToSet(channels []Channel, validDataTypes map[string]struct{}, channelIDSet map[string]struct{}) {
+	for _, channel := range channels {
+		if _, ok := validDataTypes[channel.DataType]; !ok {
+			continue
+		}
+		channelIDSet[channel.ChannelId] = struct{}{}
+	}
+}
+
+func uniqueStrings(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		set[v] = struct{}{}
+	}
+
+	result := make([]string, 0, len(set))
+	for v := range set {
+		result = append(result, v)
+	}
+
+	return result
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	if len(set) == 0 {
+		return []string{}
+	}
+	result := make([]string, 0, len(set))
+	for k := range set {
+		result = append(result, k)
+	}
+	slices.Sort(result)
+	return result
 }
 
 func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGetDataSubQuery {

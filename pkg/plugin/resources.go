@@ -169,8 +169,17 @@ func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallRe
 }
 
 func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
-	body, err := json.Marshal(map[string]any{"message": "hello world"})
-	log.DefaultLogger.Debug("resolving sift query")
+	log.DefaultLogger.Debug("resolveQueryToSiftMetadata request", "body", string(req.Body))
+
+	response := struct {
+		Message string          `json:"message"`
+		Query   json.RawMessage `json:"query"`
+	}{
+		Message: "hello world",
+		Query:   json.RawMessage(req.Body),
+	}
+
+	body, err := json.Marshal(response)
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,

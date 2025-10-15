@@ -128,10 +128,11 @@ export const VisualSiftQueryEditor = (props: Props) => {
 
     const fetchMetadata = async () => {
       const resourcePath = 'resolve-query-to-sift-metadata';
+      const latestQuery = queryRef.current;
       try {
-        console.log('trying resolveQueryToSiftMetadata');
-        const response = await datasource.postResource<unknown>(resourcePath, query);
+        const response = await datasource.postResource<unknown>(resourcePath, latestQuery);
         console.log('resolveQueryToSiftMetadata', response);
+
       } catch (error) {
         console.error('resolveQueryToSiftMetadata failed', error);
       }

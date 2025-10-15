@@ -559,11 +559,13 @@ func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDa
 			}
 		}
 
-		validRunIds, err := d.getValidRunsById(pCtx, runIdQueries)
-		if err != nil {
-			return queryMetadata{}, fmt.Errorf("error looking up runs: %w", err)
+		if len(runIdQueries) > 0 {
+			validRunIds, err := d.getValidRunsById(pCtx, runIdQueries)
+			if err != nil {
+				return queryMetadata{}, fmt.Errorf("error looking up runs: %w", err)
+			}
+			runIds = append(runIds, validRunIds...)
 		}
-		runIds = append(runIds, validRunIds...)
 
 		for _, runId := range uniqueStrings(runIds) {
 			runIDSet[runId] = struct{}{}

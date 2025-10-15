@@ -1996,6 +1996,26 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 			},
 		},
 		{
+			name: "no run selection",
+			input: queryModel{
+				ChannelDataQueries: []channelDataQuery{
+					{
+						AssetQueries: []assetQuery{
+							{AssetName: "Test Asset 1"},
+						},
+						ChannelQueries: []channelQuery{
+							{ChannelName: "Test Channel 1"},
+						},
+					},
+				},
+			},
+			expect: queryMetadata{
+				AssetIDs:   []string{"asset1"},
+				ChannelIDs: []string{"channel1"},
+				RunIDs:     []string{},
+			},
+		},
+		{
 			name: "calculated channel references",
 			input: func() queryModel {
 				refs := []channelReferenceQuery{

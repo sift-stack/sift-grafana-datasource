@@ -147,6 +147,9 @@ func (d *SiftDatasource) CallResource(ctx context.Context, req *backend.CallReso
 	case "purge-cache":
 		return d.callPurgeCache(ctx, req, sender)
 
+	case "resolve-query-to-sift-metadata":
+		return d.resolveQueryToSiftMetadata(ctx, req, sender)
+
 	default:
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,

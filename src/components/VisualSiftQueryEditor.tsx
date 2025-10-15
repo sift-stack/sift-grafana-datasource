@@ -91,7 +91,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
     const series = data?.series ?? [];
     const seen = new Set<string>();
     const channels: Array<{ channelId: string; assetId?: string; runId?: string }> = [];
-    const debugLog = false
+    const debugLog = true;
 
     for (const frame of series) {
       for (const field of frame.fields ?? []) {
@@ -109,6 +109,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
         }
       }
     }
+
     if (debugLog) {
       if (channels.length > 0) {
         console.log('Sift query channels', channels);
@@ -119,6 +120,25 @@ export const VisualSiftQueryEditor = (props: Props) => {
 
     setShareLinkItems(channels);
   }, [data, query]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    const fetchMetadata = async () => {
+      const resourcePath = 'resolve-query-to-sift-metadata';
+      try {
+        console.log('trying resolveQueryToSiftMetadata');
+        const response = await datasource.postResource<unknown>(resourcePath, query);
+        console.log('resolveQueryToSiftMetadata', response);
+      } catch (error) {
+        console.error('resolveQueryToSiftMetadata failed', error);
+      }
+    };
+
+    void fetchMetadata();
+  }, [loading, datasource, query]);
 
   const apiRestUrl = datasource.getApiRestUrl();
 

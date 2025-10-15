@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 // Limit number of results that can be returned from the Sift API
@@ -165,5 +165,21 @@ func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallRe
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,
 		Body:   []byte("{}"),
+	})
+}
+
+func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	body, err := json.Marshal(map[string]any{"message": "hello world"})
+	log.DefaultLogger.Debug("resolving sift query")
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusInternalServerError,
+			Body:   []byte(fmt.Sprintf("encode response: %s", err)),
+		})
+	}
+
+	return sender.Send(&backend.CallResourceResponse{
+		Status: http.StatusOK,
+		Body:   body,
 	})
 }

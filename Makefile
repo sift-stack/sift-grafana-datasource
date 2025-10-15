@@ -3,14 +3,14 @@
 COMPOSE ?= docker compose
 
 up:
-	$(COMPOSE) up --build --watch
+	$(COMPOSE) up --build
 
 log:
 	$(COMPOSE) logs --follow
 
 restart:
 	$(COMPOSE) down
-	$(COMPOSE) up --build --watch
+	$(COMPOSE) up --build
 
 down:
 	$(COMPOSE) down

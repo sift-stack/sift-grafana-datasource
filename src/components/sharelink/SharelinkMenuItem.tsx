@@ -62,6 +62,86 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
       };
     });
 
+    const altLegend = {
+      "left": ["y-axis-1"],
+      "right": [],
+      "bottom": ["x-axis-1"],
+      "axes": {
+        "y-axis-1": ["calc-key-1"],
+        "x-axis-1": ["calc-key-1"]
+      },
+      "xAxes": {
+        "x-axis-1": {
+          "fromDatetime": "",
+          "toDatetime": "",
+          "minDatetime": "",
+          "maxDatetime": ""
+        }
+      },
+      "channels": {
+        "calc-key-1": {
+          "visible": true,
+          "color": "#3d58ff",
+          "showTooltip": true,
+          "calculatedChannelConfig": {
+            "channelKey": "calc-key-1",
+            "name": "Average of $1 and $2",
+            "channelReferences": {
+              "$1": "raw-channel-id-1",
+              "$2": "raw-channel-id-2"
+            },
+            "expression": "($1 + $2) / 2",
+            "dataType": "double",
+            "unitAbbreviatedName": ""
+          }
+        }
+      },
+      "stringChannelKeys": [],
+      "axesRunLookup": {},
+      "axesDataZoom": {
+        "y-axis-1": [0, 100]
+      },
+      "axesCustomScale": {},
+      "axesScaleType": {
+        "y-axis-1": "linear"
+      }
+    }
+
+    const altLegend2 = {
+      "left": ["y-axis-1"],
+      "right": [],
+      "bottom": ["x-axis-1"],
+      "axes": {
+        "y-axis-1": ["channel-key-1"],
+        "x-axis-1": ["channel-key-1"]
+      },
+      "xAxes": {
+        "x-axis-1": {
+          "fromDatetime": "",
+          "toDatetime": "",
+          "minDatetime": "",
+          "maxDatetime": ""
+        }
+      },
+      "channels": {
+        "channel-key-1": {
+          "channelId": "your-channel-id",
+          "visible": true,
+          "color": "#3d58ff",
+          "showTooltip": true
+        }
+      },
+      "stringChannelKeys": [],
+      "axesRunLookup": {},
+      "axesDataZoom": {
+        "y-axis-1": [0, 100]
+      },
+      "axesCustomScale": {},
+      "axesScaleType": {
+        "y-axis-1": "linear"
+      }
+    }
+
     const legend: LegendConfigPayload = {
       left: ['y-axis-1'],
       right: [],
@@ -70,10 +150,23 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
         'y-axis-1': channelKeys,
         'x-axis-1': channelKeys,
       },
-      xAxes: {},
+      xAxes: {
+        "x-axis-1": {
+          "fromDatetime": "",
+          "toDatetime": "",
+          "minDatetime": "",
+          "maxDatetime": ""
+        }
+      },
       channels: legendChannels,
       stringChannelKeys: [],
       axesRunLookup: {},
+      axesDataZoom: {
+        "y-axis-1": [0,100]
+      },
+      axesScaleType: {
+        "y-axis-1": "linear"
+      }
     };
 
     const assets = items.assetIds && items.assetIds.length > 0 ? items.assetIds : undefined;

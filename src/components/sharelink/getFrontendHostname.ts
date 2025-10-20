@@ -12,6 +12,10 @@ export function getFrontendHostname(apiBaseUrl: string): string | null {
       return 'app.siftstack.com';
     case 'gov.api.siftstack.com':
       return 'gov.siftstack.com';
+    case 'localhost:8080':
+      return 'http://localhost:3000';
+    case 'host.docker.internal:8080':
+      return 'http://localhost:3000';
     default:
       return null;
   }

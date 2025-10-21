@@ -4,7 +4,7 @@ import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import siftLogo from '../../img/logo.svg';
 import { getFrontendHostname } from './getFrontendHostname';
-import { createExplorerLink, type LegendConfigPayload } from './generate';
+import { createExplorerLink, type LegendConfigPayload } from './createExplorerLink';
 
 export interface SharelinkItems {
   channelIds: string[];

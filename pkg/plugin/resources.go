@@ -196,7 +196,32 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		"channelIds", metadata.ChannelIDs,
 	)
 
-	body, err := json.Marshal(metadata)
+	calculatedExpressions := make([]string, 0)
+	for _, cdq := range queryModel.ChannelDataQueries {
+		for _, calcQuery := range cdq.CalculatedChannelQueries {
+			expression := strings.TrimSpace(calcQuery.Expression)
+			if expression != "" {
+				calculatedExpressions = append(calculatedExpressions, expression)
+			}
+		}
+	}
+
+	responsePayload := struct {
+		AssetIDs              []string `json:"assetIds"`
+		RunIDs                []string `json:"runIds"`
+		ChannelIDs            []string `json:"channelIds"`
+		CalculatedExpressions []string `json:"calculatedChannelExpressions,omitempty"`
+	}{
+		AssetIDs:   metadata.AssetIDs,
+		RunIDs:     metadata.RunIDs,
+		ChannelIDs: metadata.ChannelIDs,
+	}
+
+	if len(calculatedExpressions) > 0 {
+		responsePayload.CalculatedExpressions = calculatedExpressions
+	}
+
+	body, err := json.Marshal(responsePayload)
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusInternalServerError,

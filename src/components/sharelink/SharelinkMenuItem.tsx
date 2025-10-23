@@ -16,13 +16,17 @@ interface SharelinkMenuItemProps {
   items?: SharelinkItems;
   className?: string;
   apiBaseUrl?: string;
+  timeRange?: {
+    from: string, //iso 8601 timestamps
+    to: string
+  };
 }
 
 function openLink(link: string) {
   console.log('opening sift link: ', link)
   window.open(link, '_blank');
 }
-export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMenuItemProps) => {
+export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
   const appEvents = useMemo(() => getAppEvents(), []);
 
   const { shareLink, disabledReason } = useMemo(() => {
@@ -141,6 +145,17 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
         "y-axis-1": "linear"
       }
     }
+    let xAxis =  {
+        "fromDatetime": "",
+        "toDatetime": "",
+        "minDatetime": "",
+        "maxDatetime": ""
+      }
+    if (timeRange) {
+      xAxis.fromDatetime = timeRange.from
+      xAxis.toDatetime = timeRange.to
+    }
+
 
     const legend: LegendConfigPayload = {
       left: ['y-axis-1'],
@@ -151,12 +166,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
         'x-axis-1': channelKeys,
       },
       xAxes: {
-        "x-axis-1": {
-          "fromDatetime": "",
-          "toDatetime": "",
-          "minDatetime": "",
-          "maxDatetime": ""
-        }
+        "x-axis-1": xAxis
       },
       channels: legendChannels,
       stringChannelKeys: [],

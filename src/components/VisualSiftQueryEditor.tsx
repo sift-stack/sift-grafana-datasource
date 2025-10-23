@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { QueryEditorProps } from '@grafana/data';
 import { Checkbox, IconButton, InlineField, InlineFieldRow, InlineLabel, RadioButtonGroup } from '@grafana/ui';
@@ -12,7 +12,7 @@ import { SharelinkMenuItem, SharelinkItems } from './sharelink/SharelinkMenuItem
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
 export const VisualSiftQueryEditor = (props: Props) => {
-  const { query, onChange, onRunQuery, datasource, data } = props;
+  const { query, onChange, onRunQuery, datasource, data, range } = props;
   const panelId = typeof data?.request?.panelId === 'number' ? data.request.panelId : -1;
 
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,15 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [shareLinkItems, setShareLinkItems] = useState<SharelinkItems | undefined>();
 
   const queryRef = useRef(query);
+  const shareLinkTimeRange = useMemo(() => {
+    if (!range) {
+      return undefined;
+    }
+    return {
+      from: range.from?.toISOString?.() ?? String(range.from ?? ''),
+      to: range.to?.toISOString?.() ?? String(range.to ?? ''),
+    };
+  }, [range]);
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
@@ -88,6 +97,10 @@ export const VisualSiftQueryEditor = (props: Props) => {
   );
 
   useEffect(() => {
+    if (shareLinkTimeRange) {
+      console.log('VisualSiftQueryEditor time range (ISO)', shareLinkTimeRange);
+    }
+
     if (loading) {
       return;
     }
@@ -111,7 +124,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
     };
 
     void fetchMetadata();
-  }, [loading, datasource, query]);
+  }, [loading, datasource, query, shareLinkTimeRange]);
 
   const apiRestUrl = datasource.getApiRestUrl();
 
@@ -145,7 +158,11 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem items={shareLinkItems} apiBaseUrl={apiRestUrl} />
+        <SharelinkMenuItem
+          items={shareLinkItems}
+          apiBaseUrl={apiRestUrl}
+          timeRange={shareLinkTimeRange}
+        />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

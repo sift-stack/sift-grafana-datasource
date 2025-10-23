@@ -96,6 +96,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
       const resourcePath = 'resolve-query-to-sift-metadata';
       const latestQuery = queryRef.current;
       try {
+        console.log('sending query to backend: ', latestQuery)
         const response = await datasource.postResource<SharelinkItems>(resourcePath, latestQuery);
         console.log('resolveQueryToSiftMetadata', response);
         if (response && Array.isArray(response.channelIds) && response.channelIds.length > 0) {

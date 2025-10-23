@@ -180,7 +180,27 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		})
 	}
 
-	metadata, err := generateQueryMetadata(req.PluginContext, *queryModel, d)
+	metadataInput := *queryModel
+	hasCalculatedChannels := false
+	for _, cdq := range queryModel.ChannelDataQueries {
+		if len(cdq.CalculatedChannelQueries) > 0 {
+			hasCalculatedChannels = true
+			break
+		}
+	}
+
+	if hasCalculatedChannels {
+		sanitizedModel := *queryModel
+		sanitizedModel.ChannelDataQueries = make([]channelDataQuery, len(queryModel.ChannelDataQueries))
+		for i, cdq := range queryModel.ChannelDataQueries {
+			sanitizedCDQ := cdq
+			sanitizedCDQ.CalculatedChannelQueries = nil
+			sanitizedModel.ChannelDataQueries[i] = sanitizedCDQ
+		}
+		metadataInput = sanitizedModel
+	}
+
+	metadata, err := generateQueryMetadata(req.PluginContext, metadataInput, d)
 	if err != nil {
 		log.DefaultLogger.Error("resolveQueryToSiftMetadata metadata error", "error", err)
 		return sender.Send(&backend.CallResourceResponse{

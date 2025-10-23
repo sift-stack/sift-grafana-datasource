@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
-import siftLogo from '../../img/logo.svg';
+import squareShare from '../../img/squareShare.svg';
 import { getFrontendHostname } from './getFrontendHostname';
 import { createExplorerLink, type LegendConfigPayload } from './createExplorerLink';
 
@@ -241,8 +241,8 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
               event.preventDefault();
               openMenu(event);
             }}
-            size="md"
-            fill="text"
+            size="sm"
+
             variant="secondary"
             aria-label="Open in Sift"
             tooltip={
@@ -250,8 +250,10 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl }: SharelinkMen
                 ? "Open this query in Sift's explorer view"
                 : disabledReason ?? 'Share link unavailable'
             }
+            style={{display: "flex", alignItems: 'center', userSelect: "none"}}
           >
-            <img src={siftLogo} alt="Sift" style={{ width: 20, height: 20 }} />
+            <img src={squareShare} alt="Share Button" style={{ width: 11, height: 11, marginTop: -1, marginRight: 7 }} />
+            <span>Explore in Sift</span>
           </Button>
         )}
       </WithContextMenu>

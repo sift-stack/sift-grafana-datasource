@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
-import squareShare from '../../img/squareShare.svg';
 import { getFrontendHostname } from './getFrontendHostname';
 import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig } from './createExplorerLink';
 import type { SharelinkItems } from '../../types';
+import { SquareShareIcon } from './SquareShareIcon';
 
 interface SharelinkMenuItemProps {
   items?: SharelinkItems;
@@ -196,11 +196,9 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
             tooltip={shareLink ? "Open this query in Sift's explorer view" : disabledReason ?? 'Share link unavailable'}
             style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}
           >
-            <img
-              src={squareShare}
-              alt="Share Button"
+            <SquareShareIcon
               style={{ width: 11, height: 11, marginTop: -1, marginRight: 7 }}
-            />
+              ></SquareShareIcon>
             <span>Explore in Sift</span>
           </Button>
         )}

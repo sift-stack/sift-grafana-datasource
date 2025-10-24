@@ -1,12 +1,12 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SharelinkMenuItem } from './SharelinkMenuItem';
-import { createExplorerLink } from './createExplorerLink';
+import { generateLinkFromQuery } from './createExplorerLink';
 import { getFrontendHostname } from './getFrontendHostname';
 import { getAppEvents } from '@grafana/runtime';
 
 jest.mock('./createExplorerLink', () => ({
-  createExplorerLink: jest.fn(),
+  generateLinkFromQuery: jest.fn(),
 }));
 
 jest.mock('./getFrontendHostname', () => ({
@@ -17,7 +17,7 @@ jest.mock('@grafana/runtime', () => ({
   getAppEvents: jest.fn(),
 }));
 
-const createExplorerLinkMock = createExplorerLink as jest.MockedFunction<typeof createExplorerLink>;
+const generateLinkFromQueryMock = generateLinkFromQuery as jest.MockedFunction<typeof generateLinkFromQuery>;
 const getFrontendHostnameMock = getFrontendHostname as jest.MockedFunction<typeof getFrontendHostname>;
 const getAppEventsMock = getAppEvents as jest.MockedFunction<typeof getAppEvents>;
 
@@ -27,7 +27,7 @@ describe('SharelinkMenuItem', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    createExplorerLinkMock.mockReturnValue('https://sift.example.com/explorer');
+    generateLinkFromQueryMock.mockReturnValue('https://sift.example.com/explorer');
     getFrontendHostnameMock.mockReturnValue('sift.example.com');
     getAppEventsMock.mockReturnValue(null as any);
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -39,7 +39,7 @@ describe('SharelinkMenuItem', () => {
     errorSpy.mockRestore();
   });
 
-  it('creates explorer link with legend entries for all channels', () => {
+  it('generates link with channel items', () => {
     const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
 
     const items = {
@@ -51,32 +51,12 @@ describe('SharelinkMenuItem', () => {
 
     render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
 
-    expect(createExplorerLinkMock).toHaveBeenCalledTimes(1);
-    const payload = createExplorerLinkMock.mock.calls[0][0];
-
-    expect(payload.origin).toBe('https://sift.example.com');
-    expect(payload.assets).toEqual(['asset-1', 'asset-2']);
-    expect(payload.runs).toEqual(['run-1', 'run-2']);
-
-    const legend = payload.legend!;
-    expect(legend.axes['y-axis-1']).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
-    expect(legend.axes['x-axis-1']).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
-    expect(Object.keys(legend.channels)).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
-    expect(legend.channels['channel-key-1']).toMatchObject({
-      channelId: 'channel-1',
-      visible: true,
-      showTooltip: true,
-    });
-    expect(legend.channels['channel-key-2']).toMatchObject({
-      channelId: 'channel-2',
-      visible: true,
-      showTooltip: true,
-    });
-    expect(legend.channels['channel-key-3']).toMatchObject({
-      channelId: 'channel-3',
-      visible: true,
-      showTooltip: true,
-    });
+    expect(generateLinkFromQueryMock).toHaveBeenCalledTimes(1);
+    expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
+      'sift.example.com',
+      items,
+      undefined
+    );
 
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
@@ -92,7 +72,7 @@ describe('SharelinkMenuItem', () => {
 
     render(<SharelinkMenuItem items={items} apiBaseUrl={undefined} />);
 
-    expect(createExplorerLinkMock).not.toHaveBeenCalled();
+    expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
 
     expect(openSpy).not.toHaveBeenCalled();
 
@@ -108,5 +88,64 @@ describe('SharelinkMenuItem', () => {
     });
 
     openSpy.mockRestore();
+  });
+
+  it('passes timeRange to generateLinkFromQuery when provided', () => {
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    const timeRange = {
+      from: '2024-01-01T00:00:00Z',
+      to: '2024-01-02T00:00:00Z',
+    };
+
+    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" timeRange={timeRange} />);
+
+    expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
+      'sift.example.com',
+      items,
+      timeRange
+    );
+  });
+
+  it('passes undefined timeRange when not provided', () => {
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
+
+    expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
+      'sift.example.com',
+      items,
+      undefined
+    );
+  });
+
+  it('disables share link when no channels are selected', async () => {
+    const items = {
+      channelIds: [],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
+
+    expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
+
+    const menuButton = screen.getByRole('button', { name: 'Open in Sift' });
+    fireEvent.contextMenu(menuButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /Open Link/i })).toBeDisabled();
+    });
   });
 });

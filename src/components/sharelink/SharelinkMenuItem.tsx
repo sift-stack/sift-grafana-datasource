@@ -110,7 +110,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
             size="sm"
             variant="secondary"
             aria-label="Open in Sift"
-            tooltip={shareLink ? "Open this query in Sift's explorer view" : disabledReason ?? 'Share link unavailable'}
+            tooltip={shareLink ? "Open this query in Sift. Right-click for more options" : disabledReason ?? 'Share link unavailable'}
             style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}
           >
             <SquareShareIcon

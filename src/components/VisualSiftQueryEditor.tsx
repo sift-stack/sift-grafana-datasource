@@ -11,6 +11,10 @@ import { SharelinkMenuItem, SharelinkItems } from './sharelink/SharelinkMenuItem
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
+type SharelinkItemsResponse = Omit<SharelinkItems, 'calculatedChannels'> & {
+  calculatedChannels?: SharelinkItems['calculatedChannels'];
+};
+
 export const VisualSiftQueryEditor = (props: Props) => {
   const { query, onChange, onRunQuery, datasource, data, range } = props;
   const panelId = typeof data?.request?.panelId === 'number' ? data.request.panelId : -1;
@@ -106,14 +110,21 @@ export const VisualSiftQueryEditor = (props: Props) => {
     }
 
     const fetchMetadata = async () => {
-      const resourcePath = 'resolve-query-to-sift-metadata';
       const latestQuery = queryRef.current;
       try {
         console.log('sending query to backend: ', latestQuery)
-        const response = await datasource.postResource<SharelinkItems>(resourcePath, latestQuery);
+        const response = await datasource.postResource<SharelinkItemsResponse>('resolve-query-to-sift-metadata', latestQuery);
         console.log('resolveQueryToSiftMetadata', response);
-        if (response && Array.isArray(response.channelIds) && response.channelIds.length > 0) {
-          setShareLinkItems(response);
+
+        const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
+        const hasCalculatedChannels = Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;
+
+        if (response && (hasChannelIds || hasCalculatedChannels)) {
+          setShareLinkItems({
+            ...response,
+            channelIds: response.channelIds ?? [],
+            calculatedChannels: response.calculatedChannels ?? [],
+          });
         } else {
           setShareLinkItems(undefined);
         }

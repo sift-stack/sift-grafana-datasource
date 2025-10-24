@@ -93,6 +93,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
             unitAbbreviatedName: ""
           }
         }
+        console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName])
       })
     }
 

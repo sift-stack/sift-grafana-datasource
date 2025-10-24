@@ -181,24 +181,24 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 	}
 
 	metadataInput := *queryModel
-	hasCalculatedChannels := false
-	for _, cdq := range queryModel.ChannelDataQueries {
-		if len(cdq.CalculatedChannelQueries) > 0 {
-			hasCalculatedChannels = true
-			break
-		}
-	}
+	//hasCalculatedChannels := false
+	//for _, cdq := range queryModel.ChannelDataQueries {
+	//	if len(cdq.CalculatedChannelQueries) > 0 {
+	//		hasCalculatedChannels = true
+	//		break
+	//	}
+	//}
 
-	if hasCalculatedChannels {
-		sanitizedModel := *queryModel
-		sanitizedModel.ChannelDataQueries = make([]channelDataQuery, len(queryModel.ChannelDataQueries))
-		for i, cdq := range queryModel.ChannelDataQueries {
-			sanitizedCDQ := cdq
-			sanitizedCDQ.CalculatedChannelQueries = nil
-			sanitizedModel.ChannelDataQueries[i] = sanitizedCDQ
-		}
-		metadataInput = sanitizedModel
-	}
+	//if hasCalculatedChannels {
+	//	sanitizedModel := *queryModel
+	//	sanitizedModel.ChannelDataQueries = make([]channelDataQuery, len(queryModel.ChannelDataQueries))
+	//	for i, cdq := range queryModel.ChannelDataQueries {
+	//		sanitizedCDQ := cdq
+	//		sanitizedCDQ.CalculatedChannelQueries = nil
+	//		sanitizedModel.ChannelDataQueries[i] = sanitizedCDQ
+	//	}
+	//	metadataInput = sanitizedModel
+	//}
 
 	metadata, err := generateQueryMetadata(req.PluginContext, metadataInput, d)
 	if err != nil {
@@ -216,29 +216,139 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		"channelIds", metadata.ChannelIDs,
 	)
 
-	calculatedExpressions := make([]string, 0)
+	type calculatedChannelAggregate struct {
+		Name               string
+		Expression         string
+		ExpressionDataType string
+		SourceChannels     []string
+		placeholderIndex   map[string]int
+	}
+
+	type calculatedChannelMetadata struct {
+		Name               string   `json:"name"`
+		SourceChannels     []string `json:"sourceChannels"`
+		Expression         string   `json:"expression"`
+		ExpressionDataType string   `json:"expressionDataType"`
+	}
+
+	calculatedAggregates := make(map[string]*calculatedChannelAggregate)
+	calculatedOrder := make([]string, 0)
+
 	for _, cdq := range queryModel.ChannelDataQueries {
 		for _, calcQuery := range cdq.CalculatedChannelQueries {
-			expression := strings.TrimSpace(calcQuery.Expression)
-			if expression != "" {
-				calculatedExpressions = append(calculatedExpressions, expression)
+			rawName := calcQuery.Name
+			trimmedName := strings.TrimSpace(rawName)
+			if trimmedName == "" {
+				continue
+			}
+
+			aggregate, exists := calculatedAggregates[rawName]
+			if !exists {
+				aggregate = &calculatedChannelAggregate{
+					Name:               trimmedName,
+					Expression:         strings.TrimSpace(calcQuery.Expression),
+					ExpressionDataType: "double",
+					SourceChannels:     make([]string, len(calcQuery.ChannelReferences)),
+					placeholderIndex:   make(map[string]int, len(calcQuery.ChannelReferences)),
+				}
+				for idx, ref := range calcQuery.ChannelReferences {
+					aggregate.placeholderIndex[ref.ChannelReference] = idx
+					if ref.ChannelId != "" {
+						aggregate.SourceChannels[idx] = ref.ChannelId
+					}
+				}
+				calculatedAggregates[rawName] = aggregate
+				calculatedOrder = append(calculatedOrder, rawName)
+			} else {
+				if trimmedExpression := strings.TrimSpace(calcQuery.Expression); trimmedExpression != "" {
+					aggregate.Expression = trimmedExpression
+				}
+
+				if len(calcQuery.ChannelReferences) != len(aggregate.SourceChannels) {
+					newSource := make([]string, len(calcQuery.ChannelReferences))
+					newIndex := make(map[string]int, len(calcQuery.ChannelReferences))
+					for idx, ref := range calcQuery.ChannelReferences {
+						newIndex[ref.ChannelReference] = idx
+						if existingIdx, ok := aggregate.placeholderIndex[ref.ChannelReference]; ok && existingIdx < len(aggregate.SourceChannels) {
+							newSource[idx] = aggregate.SourceChannels[existingIdx]
+						}
+						if ref.ChannelId != "" {
+							newSource[idx] = ref.ChannelId
+						}
+					}
+					aggregate.SourceChannels = newSource
+					aggregate.placeholderIndex = newIndex
+				} else {
+					for idx, ref := range calcQuery.ChannelReferences {
+						aggregate.placeholderIndex[ref.ChannelReference] = idx
+						if ref.ChannelId != "" && aggregate.SourceChannels[idx] == "" {
+							aggregate.SourceChannels[idx] = ref.ChannelId
+						}
+					}
+				}
 			}
 		}
 	}
 
+	calculatedChannels := make([]calculatedChannelMetadata, 0, len(calculatedAggregates))
+	if len(calculatedAggregates) > 0 {
+		if _, calculatedKeys, err := generateQueries(req.PluginContext, metadataInput, d); err != nil {
+			log.DefaultLogger.Error("resolveQueryToSiftMetadata calculated channel lookup error", "error", err)
+		} else {
+			for _, key := range calculatedKeys {
+				aggregate, ok := calculatedAggregates[key.channelName]
+				if !ok {
+					continue
+				}
+				for _, ref := range key.channelReferences {
+					if pos, ok := aggregate.placeholderIndex[ref.ChannelReference]; ok {
+						if pos < len(aggregate.SourceChannels) && aggregate.SourceChannels[pos] == "" {
+							aggregate.SourceChannels[pos] = ref.ChannelId
+						}
+					}
+				}
+			}
+		}
+
+		for _, name := range calculatedOrder {
+			aggregate, ok := calculatedAggregates[name]
+			if !ok {
+				continue
+			}
+			sourceChannels := make([]string, len(aggregate.SourceChannels))
+			copy(sourceChannels, aggregate.SourceChannels)
+			allResolved := true
+			for _, channelID := range sourceChannels {
+				if strings.TrimSpace(channelID) == "" {
+					allResolved = false
+					break
+				}
+			}
+			if !allResolved {
+				continue
+			}
+			calculatedChannels = append(calculatedChannels, calculatedChannelMetadata{
+				Name:               aggregate.Name,
+				SourceChannels:     sourceChannels,
+				Expression:         aggregate.Expression,
+				ExpressionDataType: aggregate.ExpressionDataType,
+			})
+		}
+	}
+
 	responsePayload := struct {
-		AssetIDs              []string `json:"assetIds"`
-		RunIDs                []string `json:"runIds"`
-		ChannelIDs            []string `json:"channelIds"`
-		CalculatedExpressions []string `json:"calculatedChannelExpressions,omitempty"`
+		AssetIDs           []string                    `json:"assetIds"`
+		RunIDs             []string                    `json:"runIds"`
+		ChannelIDs         []string                    `json:"channelIds"`
+		CalculatedChannels []calculatedChannelMetadata `json:"calculatedChannels,omitempty"`
 	}{
 		AssetIDs:   metadata.AssetIDs,
 		RunIDs:     metadata.RunIDs,
 		ChannelIDs: metadata.ChannelIDs,
 	}
 
-	if len(calculatedExpressions) > 0 {
-		responsePayload.CalculatedExpressions = calculatedExpressions
+	if len(calculatedChannels) > 0 {
+		responsePayload.CalculatedChannels = calculatedChannels
 	}
 
 	body, err := json.Marshal(responsePayload)

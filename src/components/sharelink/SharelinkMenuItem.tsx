@@ -4,12 +4,18 @@ import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import squareShare from '../../img/squareShare.svg';
 import { getFrontendHostname } from './getFrontendHostname';
-import { createExplorerLink, type LegendConfigPayload } from './createExplorerLink';
+import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig } from './createExplorerLink';
 
 export interface SharelinkItems {
   channelIds: string[];
   assetIds?: string[];
   runIds?: string[];
+  calculatedChannels: Array<{
+    name: string;
+    sourceChannels: string[];
+    expression: string,
+    expressionDataType: string
+  }>
 }
 
 interface SharelinkMenuItemProps {
@@ -65,6 +71,31 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
         showTooltip: true,
       };
     });
+    if (items.calculatedChannels) {
+      items.calculatedChannels.forEach((calcChannel, index)=>{
+        const channelKeyIndex = channelKeys.length+index
+        const channelKeyName = `channel-key=${channelKeyIndex}`
+
+        const channelReferences: Record<string, string> = {}
+        calcChannel.sourceChannels.forEach((el, index)=>{
+          channelReferences[`$${index+1}`] = el
+        })
+
+        legendChannels[channelKeyName] = {
+          visible: true,
+          showTooltip: true,
+          calculatedChannelConfig: {
+            channelKey: channelKeyName,
+            name: calcChannel.name,
+            channelReferences: channelReferences,
+            expression: calcChannel.expression,
+            dataType: calcChannel.expressionDataType,
+            unitAbbreviatedName: ""
+          }
+        }
+      })
+    }
+
 
     const altLegend = {
       "left": ["y-axis-1"],
@@ -191,7 +222,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
       }),
       disabledReason: undefined,
     };
-  }, [apiBaseUrl, items]);
+  }, [apiBaseUrl, items, timeRange]);
 
   const copyToClipboard = async (value: string) => {
     try {

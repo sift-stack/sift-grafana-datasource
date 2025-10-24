@@ -9,13 +9,23 @@ declare const Buffer: undefined | { from(data: string, encoding: string): { toSt
 
 type DatazoomTuple = [number, number];
 
+export type CalculatedChannelConfig = {
+  channelKey: string,
+  name: string,
+  channelReferences: Record<string, string>,
+  expression: string,
+  dataType: string,
+  unitAbbreviatedName: string
+}
+
+
 type LegendChannelConfigPayload = {
   visible: boolean;
   color?: string;
   showTooltip: boolean;
   channelId?: string;
   bitfieldElementConfig?: unknown;
-  calculatedChannelConfig?: unknown;
+  calculatedChannelConfig?: CalculatedChannelConfig;
   [key: string]: unknown;
 };
 

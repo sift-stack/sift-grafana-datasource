@@ -3,7 +3,7 @@ import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import { getFrontendHostname } from './getFrontendHostname';
-import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig, generateLinkFromQuery } from './createExplorerLink';
+import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig, generateLinkFromQuery } from './generateLinkFromQuery';
 import type { SharelinkItems, SharelinkTimeRange } from '../../types';
 import { SquareShareIcon } from '../common/CustomIcons';
 

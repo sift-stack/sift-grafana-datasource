@@ -253,7 +253,7 @@ function setHashValue(hash: URLSearchParams, key: HashKey, value: unknown) {
   setIfPresent(hash, HASH_KEYS[key], String(value));
 }
 
-export function createExplorerLink(params: ExplorerLinkParams): string {
+function createExplorerLink(params: ExplorerLinkParams): string {
   const basePath = normaliseBasePath(params.basePath ?? BASE_PATH_DEFAULT);
   const searchParams = new URLSearchParams();
 

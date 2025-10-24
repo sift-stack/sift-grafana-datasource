@@ -1,11 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SharelinkMenuItem } from './SharelinkMenuItem';
-import { generateLinkFromQuery } from './createExplorerLink';
+import { generateLinkFromQuery } from './generateLinkFromQuery';
 import { getFrontendHostname } from './getFrontendHostname';
 import { getAppEvents } from '@grafana/runtime';
 
-jest.mock('./createExplorerLink', () => ({
+jest.mock('./generateLinkFromQuery', () => ({
   generateLinkFromQuery: jest.fn(),
 }));
 

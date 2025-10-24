@@ -46,6 +46,7 @@ describe('SharelinkMenuItem', () => {
       channelIds: ['channel-1', 'channel-2', 'channel-3'],
       assetIds: ['asset-1', 'asset-2'],
       runIds: ['run-1', 'run-2'],
+      calculatedChannels: [],
     };
 
     render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
@@ -75,7 +76,7 @@ describe('SharelinkMenuItem', () => {
   it('disables share actions when API base URL is not configured', async () => {
     const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
 
-    const items = { channelIds: ['channel-1'], assetIds: ['asset-1'], runIds: ['run-1'] };
+    const items = { channelIds: ['channel-1'], assetIds: ['asset-1'], runIds: ['run-1'], calculatedChannels: [] };
 
     render(<SharelinkMenuItem items={items} apiBaseUrl={undefined} />);
 

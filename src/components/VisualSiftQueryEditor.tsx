@@ -3,17 +3,21 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QueryEditorProps } from '@grafana/data';
 import { Checkbox, IconButton, InlineField, InlineFieldRow, InlineLabel, RadioButtonGroup } from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
-import { ChannelDataQuery, QueryType, QueryTypes, SiftDataSourceOptions, SiftQuery } from '../types';
+import {
+  ChannelDataQuery,
+  QueryType,
+  QueryTypes,
+  SharelinkItems,
+  SharelinkMetadataResponse,
+  SiftDataSourceOptions,
+  SiftQuery,
+} from '../types';
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { SharelinkMenuItem, SharelinkItems } from './sharelink/SharelinkMenuItem';
+import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
-
-type SharelinkItemsResponse = Omit<SharelinkItems, 'calculatedChannels'> & {
-  calculatedChannels?: SharelinkItems['calculatedChannels'];
-};
 
 export const VisualSiftQueryEditor = (props: Props) => {
   const { query, onChange, onRunQuery, datasource, data, range } = props;
@@ -110,11 +114,10 @@ export const VisualSiftQueryEditor = (props: Props) => {
     }
 
     const fetchMetadata = async () => {
+      const resourcePath = 'resolve-query-to-sift-metadata';
       const latestQuery = queryRef.current;
       try {
-        console.log('sending query to backend: ', latestQuery)
-        const response = await datasource.postResource<SharelinkItemsResponse>('resolve-query-to-sift-metadata', latestQuery);
-        console.log('resolveQueryToSiftMetadata', response);
+        const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, latestQuery);
 
         const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
         const hasCalculatedChannels = Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;

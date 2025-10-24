@@ -5,18 +5,7 @@ import { getAppEvents } from '@grafana/runtime';
 import squareShare from '../../img/squareShare.svg';
 import { getFrontendHostname } from './getFrontendHostname';
 import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig } from './createExplorerLink';
-
-export interface SharelinkItems {
-  channelIds: string[];
-  assetIds?: string[];
-  runIds?: string[];
-  calculatedChannels: Array<{
-    name: string;
-    sourceChannels: string[];
-    expression: string,
-    expressionDataType: string
-  }>
-}
+import type { SharelinkItems } from '../../types';
 
 interface SharelinkMenuItemProps {
   items?: SharelinkItems;
@@ -67,7 +56,6 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
       legendChannels[channelKey] = {
         channelId,
         visible: true,
-        // color: '#3d58ff',
         showTooltip: true,
       };
     });
@@ -97,86 +85,6 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
       })
     }
 
-
-    const altLegend = {
-      "left": ["y-axis-1"],
-      "right": [],
-      "bottom": ["x-axis-1"],
-      "axes": {
-        "y-axis-1": ["calc-key-1"],
-        "x-axis-1": ["calc-key-1"]
-      },
-      "xAxes": {
-        "x-axis-1": {
-          "fromDatetime": "",
-          "toDatetime": "",
-          "minDatetime": "",
-          "maxDatetime": ""
-        }
-      },
-      "channels": {
-        "calc-key-1": {
-          "visible": true,
-          "color": "#3d58ff",
-          "showTooltip": true,
-          "calculatedChannelConfig": {
-            "channelKey": "calc-key-1",
-            "name": "Average of $1 and $2",
-            "channelReferences": {
-              "$1": "raw-channel-id-1",
-              "$2": "raw-channel-id-2"
-            },
-            "expression": "($1 + $2) / 2",
-            "dataType": "double",
-            "unitAbbreviatedName": ""
-          }
-        }
-      },
-      "stringChannelKeys": [],
-      "axesRunLookup": {},
-      "axesDataZoom": {
-        "y-axis-1": [0, 100]
-      },
-      "axesCustomScale": {},
-      "axesScaleType": {
-        "y-axis-1": "linear"
-      }
-    }
-
-    const altLegend2 = {
-      "left": ["y-axis-1"],
-      "right": [],
-      "bottom": ["x-axis-1"],
-      "axes": {
-        "y-axis-1": ["channel-key-1"],
-        "x-axis-1": ["channel-key-1"]
-      },
-      "xAxes": {
-        "x-axis-1": {
-          "fromDatetime": "",
-          "toDatetime": "",
-          "minDatetime": "",
-          "maxDatetime": ""
-        }
-      },
-      "channels": {
-        "channel-key-1": {
-          "channelId": "your-channel-id",
-          "visible": true,
-          "color": "#3d58ff",
-          "showTooltip": true
-        }
-      },
-      "stringChannelKeys": [],
-      "axesRunLookup": {},
-      "axesDataZoom": {
-        "y-axis-1": [0, 100]
-      },
-      "axesCustomScale": {},
-      "axesScaleType": {
-        "y-axis-1": "linear"
-      }
-    }
     let xAxis =  {
         "fromDatetime": "",
         "toDatetime": "",

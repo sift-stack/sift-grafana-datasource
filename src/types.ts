@@ -105,3 +105,22 @@ export const QueryTypes = {
 };
 
 export type QueryType = (typeof QueryTypes)[keyof typeof QueryTypes];
+
+export interface SharelinkCalculatedChannel {
+  name: string;
+  sourceChannels: string[];
+  expression: string;
+  expressionDataType: string;
+}
+
+export interface SharelinkMetadataResponse {
+  channelIds?: string[];
+  assetIds?: string[];
+  runIds?: string[];
+  calculatedChannels?: SharelinkCalculatedChannel[];
+}
+
+export interface SharelinkItems extends SharelinkMetadataResponse {
+  channelIds: string[];
+  calculatedChannels: SharelinkCalculatedChannel[];
+}

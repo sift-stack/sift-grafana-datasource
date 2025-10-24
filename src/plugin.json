@@ -18,8 +18,8 @@
     },
     "links": [],
     "screenshots": [
-      {"name": "Channel Query Example", "path": "img/channel-query.png"},
-      {"name": "Calculated Query Example", "path": "img/calculated-query.png"}
+      { "name": "Channel Query Example", "path": "img/channel-query.png" },
+      { "name": "Calculated Query Example", "path": "img/calculated-query.png" }
     ],
     "version": "%VERSION%",
     "updated": "%TODAY%"

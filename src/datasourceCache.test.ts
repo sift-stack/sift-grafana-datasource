@@ -382,9 +382,9 @@ describe('SiftDataSourceCache', () => {
       mockFetchCallback.mockImplementation((request: DataQueryRequest<SiftQuery>) => {
         const from = request.range.from.valueOf();
         const to = request.range.to.valueOf();
-        
+
         // Create a DataFrame for each target/query
-        const dataFrames = request.targets.map(target => {
+        const dataFrames = request.targets.map((target) => {
           return createMockDataFrame(from, to, MINUTE, target.refId, true);
         });
 
@@ -417,16 +417,16 @@ describe('SiftDataSourceCache', () => {
 
       // Initial request for first half of the time range
       const initialResponse = await cache.queryWithCache(multiQueryRequest, mockFetchCallback);
-      
+
       // Verify we got 3 DataFrames in the response
       expect(initialResponse.data).toHaveLength(3);
       expect(initialResponse.data[0].refId).toBe('A');
       expect(initialResponse.data[1].refId).toBe('B');
       expect(initialResponse.data[2].refId).toBe('C');
-      
+
       // Clear the mock to track subsequent calls
       mockFetchCallback.mockClear();
-      
+
       // Now request an expanded time range
       const expandedRequest = { ...multiQueryRequest };
       expandedRequest.range = {
@@ -437,32 +437,32 @@ describe('SiftDataSourceCache', () => {
           to: dateTime(MOCK_TIME + HOUR * 2),
         },
       };
-      
+
       const expandedResponse = await cache.queryWithCache(expandedRequest, mockFetchCallback);
-      
+
       // Verify we still got 3 DataFrames in the response after expanding the range
       expect(expandedResponse.data).toHaveLength(3);
       expect(expandedResponse.data[0].refId).toBe('A');
       expect(expandedResponse.data[1].refId).toBe('B');
       expect(expandedResponse.data[2].refId).toBe('C');
-      
+
       // Mock should have been called once to fetch the expanded range
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      
+
       // The fetched request should be for the missing range
       const fetchedRequest = mockFetchCallback.mock.calls[0][0];
       expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME + HOUR);
       expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME + HOUR * 2);
-      
+
       // Each DataFrame should have data for the full requested range
-      expandedResponse.data.forEach(frame => {
+      expandedResponse.data.forEach((frame) => {
         const timeField = frame.fields.find((f: Field) => f.type === FieldType.time);
         if (timeField) {
           const times = timeField.values;
           // Check that we have times spanning the full range
           const minTime = Math.min(...times);
           const maxTime = Math.max(...times);
-          
+
           // Allow for some small rounding errors in the test
           expect(minTime).toBeCloseTo(MOCK_TIME, -3);
           expect(maxTime).toBeCloseTo(MOCK_TIME + HOUR * 2, -3);

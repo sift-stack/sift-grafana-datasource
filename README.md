@@ -37,7 +37,6 @@ Enter these values when creating the datasource in Grafana.
 5. Query will be run after selection or clicking outside the input or by clicking the Refresh button
 6. Additional Queries can be added using the "Add Query" button to use both Channel and Calculated Channel queries in the same panel
 
-
 #### Selection Types
 
 Selection of Assets, Runs, and Channels can be done using multiple different input types. Input type may be changed using the "Change input type" button.
@@ -79,7 +78,7 @@ the string value of the variable when the query is executed.
 
 #### Caching
 
-To improve performance, queries are cached by panel for a given query and associated interval (sample rate). If the 
+To improve performance, queries are cached by panel for a given query and associated interval (sample rate). If the
 query range changes, but the query is otherwise the same, only the missing data on either side will be fetched. In the case
 where the right side of the query range is close to live, new data will always be queried for data between now and the last 10 minutes.
 

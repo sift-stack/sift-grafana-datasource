@@ -62,9 +62,21 @@ describe('SharelinkMenuItem', () => {
     expect(legend.axes['y-axis-1']).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
     expect(legend.axes['x-axis-1']).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
     expect(Object.keys(legend.channels)).toEqual(['channel-key-1', 'channel-key-2', 'channel-key-3']);
-    expect(legend.channels['channel-key-1']).toMatchObject({ channelId: 'channel-1', visible: true, showTooltip: true });
-    expect(legend.channels['channel-key-2']).toMatchObject({ channelId: 'channel-2', visible: true, showTooltip: true });
-    expect(legend.channels['channel-key-3']).toMatchObject({ channelId: 'channel-3', visible: true, showTooltip: true });
+    expect(legend.channels['channel-key-1']).toMatchObject({
+      channelId: 'channel-1',
+      visible: true,
+      showTooltip: true,
+    });
+    expect(legend.channels['channel-key-2']).toMatchObject({
+      channelId: 'channel-2',
+      visible: true,
+      showTooltip: true,
+    });
+    expect(legend.channels['channel-key-3']).toMatchObject({
+      channelId: 'channel-3',
+      visible: true,
+      showTooltip: true,
+    });
 
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);

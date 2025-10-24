@@ -120,7 +120,8 @@ export const VisualSiftQueryEditor = (props: Props) => {
         const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, latestQuery);
 
         const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
-        const hasCalculatedChannels = Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;
+        const hasCalculatedChannels =
+          Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;
 
         if (response && (hasChannelIds || hasCalculatedChannels)) {
           setShareLinkItems({
@@ -172,11 +173,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem
-          items={shareLinkItems}
-          apiBaseUrl={apiRestUrl}
-          timeRange={shareLinkTimeRange}
-        />
+        <SharelinkMenuItem items={shareLinkItems} apiBaseUrl={apiRestUrl} timeRange={shareLinkTimeRange} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

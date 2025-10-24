@@ -10,14 +10,13 @@ declare const Buffer: undefined | { from(data: string, encoding: string): { toSt
 type DatazoomTuple = [number, number];
 
 export type CalculatedChannelConfig = {
-  channelKey: string,
-  name: string,
-  channelReferences: Record<string, string>,
-  expression: string,
-  dataType: string,
-  unitAbbreviatedName: string
-}
-
+  channelKey: string;
+  name: string;
+  channelReferences: Record<string, string>;
+  expression: string;
+  dataType: string;
+  unitAbbreviatedName: string;
+};
 
 type LegendChannelConfigPayload = {
   visible: boolean;
@@ -162,7 +161,7 @@ const JSON_BASE64_KEYS: HashKey[] = [
   'otherCharts',
 ];
 
-type JsonCapableKey = typeof JSON_BASE64_KEYS[number];
+type JsonCapableKey = (typeof JSON_BASE64_KEYS)[number];
 
 type HashValueMap = Partial<Record<HashKey, unknown>>;
 

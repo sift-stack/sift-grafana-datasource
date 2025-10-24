@@ -12,13 +12,13 @@ interface SharelinkMenuItemProps {
   className?: string;
   apiBaseUrl?: string;
   timeRange?: {
-    from: string, //iso 8601 timestamps
-    to: string
+    from: string; //iso 8601 timestamps
+    to: string;
   };
 }
 
 function openLink(link: string) {
-  console.log('opening sift link: ', link)
+  console.log('opening sift link: ', link);
   window.open(link, '_blank');
 }
 export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
@@ -28,7 +28,7 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
     if (!apiBaseUrl) {
       return {
         shareLink: null,
-        disabledReason: "Configure the Sift API REST URL to enable share links",
+        disabledReason: 'Configure the Sift API REST URL to enable share links',
       };
     }
 
@@ -60,14 +60,14 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
       };
     });
     if (items.calculatedChannels) {
-      items.calculatedChannels.forEach((calcChannel, index)=>{
-        const channelKeyIndex = channelKeys.length+index
-        const channelKeyName = `channel-key=${channelKeyIndex}`
+      items.calculatedChannels.forEach((calcChannel, index) => {
+        const channelKeyIndex = channelKeys.length + index;
+        const channelKeyName = `channel-key=${channelKeyIndex}`;
 
-        const channelReferences: Record<string, string> = {}
-        calcChannel.sourceChannels.forEach((el, index)=>{
-          channelReferences[`$${index+1}`] = el
-        })
+        const channelReferences: Record<string, string> = {};
+        calcChannel.sourceChannels.forEach((el, index) => {
+          channelReferences[`$${index + 1}`] = el;
+        });
 
         legendChannels[channelKeyName] = {
           visible: true,
@@ -78,24 +78,23 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
             channelReferences: channelReferences,
             expression: calcChannel.expression,
             dataType: calcChannel.expressionDataType,
-            unitAbbreviatedName: ""
-          }
-        }
-        console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName])
-      })
+            unitAbbreviatedName: '',
+          },
+        };
+        console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName]);
+      });
     }
 
-    let xAxis =  {
-        "fromDatetime": "",
-        "toDatetime": "",
-        "minDatetime": "",
-        "maxDatetime": ""
-      }
+    let xAxis = {
+      fromDatetime: '',
+      toDatetime: '',
+      minDatetime: '',
+      maxDatetime: '',
+    };
     if (timeRange) {
-      xAxis.fromDatetime = timeRange.from
-      xAxis.toDatetime = timeRange.to
+      xAxis.fromDatetime = timeRange.from;
+      xAxis.toDatetime = timeRange.to;
     }
-
 
     const legend: LegendConfigPayload = {
       left: ['y-axis-1'],
@@ -106,17 +105,17 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
         'x-axis-1': channelKeys,
       },
       xAxes: {
-        "x-axis-1": xAxis
+        'x-axis-1': xAxis,
       },
       channels: legendChannels,
       stringChannelKeys: [],
       axesRunLookup: {},
       axesDataZoom: {
-        "y-axis-1": [0,100]
+        'y-axis-1': [0, 100],
       },
       axesScaleType: {
-        "y-axis-1": "linear"
-      }
+        'y-axis-1': 'linear',
+      },
     };
 
     const assets = items.assetIds && items.assetIds.length > 0 ? items.assetIds : undefined;
@@ -192,17 +191,16 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
               openMenu(event);
             }}
             size="sm"
-
             variant="secondary"
             aria-label="Open in Sift"
-            tooltip={
-              shareLink
-                ? "Open this query in Sift's explorer view"
-                : disabledReason ?? 'Share link unavailable'
-            }
-            style={{display: "flex", alignItems: 'center', userSelect: "none"}}
+            tooltip={shareLink ? "Open this query in Sift's explorer view" : disabledReason ?? 'Share link unavailable'}
+            style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}
           >
-            <img src={squareShare} alt="Share Button" style={{ width: 11, height: 11, marginTop: -1, marginRight: 7 }} />
+            <img
+              src={squareShare}
+              alt="Share Button"
+              style={{ width: 11, height: 11, marginTop: -1, marginRight: 7 }}
+            />
             <span>Explore in Sift</span>
           </Button>
         )}

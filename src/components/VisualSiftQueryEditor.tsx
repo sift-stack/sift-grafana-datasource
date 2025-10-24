@@ -7,8 +7,6 @@ import {
   ChannelDataQuery,
   QueryType,
   QueryTypes,
-  SharelinkItems,
-  SharelinkMetadataResponse,
   SiftDataSourceOptions,
   SiftQuery,
 } from '../types';
@@ -16,6 +14,7 @@ import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
 import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { useFetchSharelinkMetadata } from '../resources.hooks';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
@@ -27,7 +26,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [queryMode, setQueryMode] = useState<QueryType>(QueryTypes.CHANNEL);
   const [lastQuery, setLastQuery] = useState<string>('');
   const [initialRender, setInitialRender] = useState(true);
-  const [shareLinkItems, setShareLinkItems] = useState<SharelinkItems | undefined>();
 
   const queryRef = useRef(query);
   const shareLinkTimeRange = useMemo(() => {
@@ -42,6 +40,8 @@ export const VisualSiftQueryEditor = (props: Props) => {
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
+
+  const { shareLinkItems } = useFetchSharelinkMetadata(datasource, query, !loading);
 
   // After initial render, we will perform migrations. This ensures the component renders in Mixed Mode
   useEffect(() => {
@@ -108,38 +108,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
     if (shareLinkTimeRange) {
       console.log('VisualSiftQueryEditor time range (ISO)', shareLinkTimeRange);
     }
-
-    if (loading) {
-      return;
-    }
-
-    const fetchMetadata = async () => {
-      const resourcePath = 'resolve-query-to-sift-metadata';
-      const latestQuery = queryRef.current;
-      try {
-        const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, latestQuery);
-
-        const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
-        const hasCalculatedChannels =
-          Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;
-
-        if (response && (hasChannelIds || hasCalculatedChannels)) {
-          setShareLinkItems({
-            ...response,
-            channelIds: response.channelIds ?? [],
-            calculatedChannels: response.calculatedChannels ?? [],
-          });
-        } else {
-          setShareLinkItems(undefined);
-        }
-      } catch (error) {
-        console.error('resolveQueryToSiftMetadata failed', error);
-        setShareLinkItems(undefined);
-      }
-    };
-
-    void fetchMetadata();
-  }, [loading, datasource, query, shareLinkTimeRange]);
+  }, [shareLinkTimeRange]);
 
   const apiRestUrl = datasource.getApiRestUrl();
 

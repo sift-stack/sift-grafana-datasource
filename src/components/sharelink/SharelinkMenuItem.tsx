@@ -5,7 +5,7 @@ import { getAppEvents } from '@grafana/runtime';
 import { getFrontendHostname } from './getFrontendHostname';
 import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig } from './createExplorerLink';
 import type { SharelinkItems } from '../../types';
-import { SquareShareIcon } from './SquareShareIcon';
+import { SquareShareIcon } from '../common/CustomIcons';
 
 interface SharelinkMenuItemProps {
   items?: SharelinkItems;

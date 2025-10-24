@@ -3,18 +3,15 @@ import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import { getFrontendHostname } from './getFrontendHostname';
-import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig } from './createExplorerLink';
-import type { SharelinkItems } from '../../types';
+import { createExplorerLink, type LegendConfigPayload, type CalculatedChannelConfig, generateLinkFromQuery } from './createExplorerLink';
+import type { SharelinkItems, SharelinkTimeRange } from '../../types';
 import { SquareShareIcon } from '../common/CustomIcons';
 
 interface SharelinkMenuItemProps {
   items?: SharelinkItems;
   className?: string;
   apiBaseUrl?: string;
-  timeRange?: {
-    from: string; //iso 8601 timestamps
-    to: string;
-  };
+  timeRange?: SharelinkTimeRange
 }
 
 function openLink(link: string) {
@@ -46,88 +43,8 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
         disabledReason: 'Configure the Sift API REST URL to enable share links',
       };
     }
-
-    const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
-    const channelIds = items.channelIds;
-    const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);
-    const legendChannels: LegendConfigPayload['channels'] = {};
-    channelIds.forEach((channelId, index) => {
-      const channelKey = channelKeys[index];
-      legendChannels[channelKey] = {
-        channelId,
-        visible: true,
-        showTooltip: true,
-      };
-    });
-    if (items.calculatedChannels) {
-      items.calculatedChannels.forEach((calcChannel, index) => {
-        const channelKeyIndex = channelKeys.length + index;
-        const channelKeyName = `channel-key=${channelKeyIndex}`;
-
-        const channelReferences: Record<string, string> = {};
-        calcChannel.sourceChannels.forEach((el, index) => {
-          channelReferences[`$${index + 1}`] = el;
-        });
-
-        legendChannels[channelKeyName] = {
-          visible: true,
-          showTooltip: true,
-          calculatedChannelConfig: {
-            channelKey: channelKeyName,
-            name: calcChannel.name,
-            channelReferences: channelReferences,
-            expression: calcChannel.expression,
-            dataType: calcChannel.expressionDataType,
-            unitAbbreviatedName: '',
-          },
-        };
-        console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName]);
-      });
-    }
-
-    let xAxis = {
-      fromDatetime: '',
-      toDatetime: '',
-      minDatetime: '',
-      maxDatetime: '',
-    };
-    if (timeRange) {
-      xAxis.fromDatetime = timeRange.from;
-      xAxis.toDatetime = timeRange.to;
-    }
-
-    const legend: LegendConfigPayload = {
-      left: ['y-axis-1'],
-      right: [],
-      bottom: ['x-axis-1'],
-      axes: {
-        'y-axis-1': channelKeys,
-        'x-axis-1': channelKeys,
-      },
-      xAxes: {
-        'x-axis-1': xAxis,
-      },
-      channels: legendChannels,
-      stringChannelKeys: [],
-      axesRunLookup: {},
-      axesDataZoom: {
-        'y-axis-1': [0, 100],
-      },
-      axesScaleType: {
-        'y-axis-1': 'linear',
-      },
-    };
-
-    const assets = items.assetIds && items.assetIds.length > 0 ? items.assetIds : undefined;
-    const runs = items.runIds && items.runIds.length > 0 ? items.runIds : undefined;
-
     return {
-      shareLink: createExplorerLink({
-        origin,
-        assets,
-        runs,
-        legend,
-      }),
+      shareLink: generateLinkFromQuery(hostname, items, timeRange),
       disabledReason: undefined,
     };
   }, [apiBaseUrl, items, timeRange]);

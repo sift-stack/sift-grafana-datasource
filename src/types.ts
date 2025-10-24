@@ -124,3 +124,8 @@ export interface SharelinkItems extends SharelinkMetadataResponse {
   channelIds: string[];
   calculatedChannels: SharelinkCalculatedChannel[];
 }
+
+export interface SharelinkTimeRange {
+  from: string; //iso 8601 timestamps
+  to: string;
+}

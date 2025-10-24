@@ -3,6 +3,7 @@
  * understands. This mirrors the URL encoding handled by
  * `explorePageUrlSync`.
  */
+import { SharelinkItems, SharelinkTimeRange } from '../../types';
 
 // Node typings are not guaranteed, so declare Buffer for TS.
 declare const Buffer: undefined | { from(data: string, encoding: string): { toString(encoding: string): string } };
@@ -291,6 +292,89 @@ export function createExplorerLink(params: ExplorerLinkParams): string {
   }
 
   return url;
+}
+
+export function generateLinkFromQuery(hostname: string, items: SharelinkItems, timeRange?: SharelinkTimeRange) {
+  const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
+  const channelIds = items.channelIds;
+  const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);
+  const legendChannels: LegendConfigPayload['channels'] = {};
+  channelIds.forEach((channelId, index) => {
+    const channelKey = channelKeys[index];
+    legendChannels[channelKey] = {
+      channelId,
+      visible: true,
+      showTooltip: true,
+    };
+  });
+  if (items.calculatedChannels) {
+    items.calculatedChannels.forEach((calcChannel, index) => {
+      const channelKeyIndex = channelKeys.length + index;
+      const channelKeyName = `channel-key=${channelKeyIndex}`;
+
+      const channelReferences: Record<string, string> = {};
+      calcChannel.sourceChannels.forEach((el, index) => {
+        channelReferences[`$${index + 1}`] = el;
+      });
+
+      legendChannels[channelKeyName] = {
+        visible: true,
+        showTooltip: true,
+        calculatedChannelConfig: {
+          channelKey: channelKeyName,
+          name: calcChannel.name,
+          channelReferences: channelReferences,
+          expression: calcChannel.expression,
+          dataType: calcChannel.expressionDataType,
+          unitAbbreviatedName: '',
+        },
+      };
+      console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName]);
+    });
+  }
+
+  let xAxis = {
+    fromDatetime: '',
+    toDatetime: '',
+    minDatetime: '',
+    maxDatetime: '',
+  };
+  if (timeRange) {
+    xAxis.fromDatetime = timeRange.from;
+    xAxis.toDatetime = timeRange.to;
+  }
+
+  const legend: LegendConfigPayload = {
+    left: ['y-axis-1'],
+    right: [],
+    bottom: ['x-axis-1'],
+    axes: {
+      'y-axis-1': channelKeys,
+      'x-axis-1': channelKeys,
+    },
+    xAxes: {
+      'x-axis-1': xAxis,
+    },
+    channels: legendChannels,
+    stringChannelKeys: [],
+    axesRunLookup: {},
+    axesDataZoom: {
+      'y-axis-1': [0, 100],
+    },
+    axesScaleType: {
+      'y-axis-1': 'linear',
+    },
+  };
+
+  const assets = items.assetIds && items.assetIds.length > 0 ? items.assetIds : undefined;
+  const runs = items.runIds && items.runIds.length > 0 ? items.runIds : undefined;
+
+  return createExplorerLink({
+    origin,
+    assets,
+    runs,
+    legend
+  })
 }
 
 export type {

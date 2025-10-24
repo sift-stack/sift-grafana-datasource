@@ -21,12 +21,9 @@ export type CalculatedChannelConfig = {
 
 type LegendChannelConfigPayload = {
   visible: boolean;
-  color?: string;
   showTooltip: boolean;
   channelId?: string;
-  bitfieldElementConfig?: unknown;
   calculatedChannelConfig?: CalculatedChannelConfig;
-  [key: string]: unknown;
 };
 
 type LegendXAxisConfigPayload = {
@@ -34,7 +31,6 @@ type LegendXAxisConfigPayload = {
   toDatetime: string;
   minDatetime: string;
   maxDatetime: string;
-  [key: string]: unknown;
 };
 
 type LegendConfigPayload = {
@@ -47,48 +43,9 @@ type LegendConfigPayload = {
   stringChannelKeys?: string[];
   axesRunLookup?: Record<string, string>;
   axesDataZoom?: Record<string, DatazoomTuple>;
-  axesCustomScale?: Record<string, [number | null, number | null]>;
   axesScaleType?: Record<string, 'linear' | 'log'>;
-  [key: string]: unknown;
 };
 
-type TimeDisplayConfigPayload = {
-  timeDisplayType: string;
-  [key: string]: unknown;
-};
-
-type AnnotationsFilterPayload = {
-  searchTerm?: {
-    source: string;
-    isValid: boolean;
-  };
-  tags?: string[];
-  state?: Record<string, boolean>;
-  type?: string;
-  assignedToUserIds?: string[];
-  ruleIds?: string[];
-  filterToPlotTime?: boolean;
-  annotationIds?: string[];
-  includeArchivedAnnotations?: boolean;
-  [key: string]: unknown;
-};
-
-type LogViewerFiltersPayload = {
-  search?: string;
-  caseSensitive?: boolean;
-  regex?: boolean;
-  [key: string]: unknown;
-};
-
-type LogViewerFocusedLogLinePayload = Record<string, unknown>;
-
-type RulerRangePayload = {
-  startTime?: string;
-  endTime?: string;
-  [key: string]: unknown;
-};
-
-type RemoteFilesPayload = Record<string, unknown>;
 type OtherChartsPayload = Record<string, unknown>;
 
 type ExtraHashParams = Record<string, string>;
@@ -98,32 +55,12 @@ type ExplorerLinkParams = {
   origin?: string;
   /** Path to the explorer route. Defaults to '/explorer'. */
   basePath?: string;
-  /** Optional tabStateId appended as a search param. */
-  tabStateId?: string;
   /** Asset IDs to preload. */
   assets?: string[];
   /** Run IDs to preload. */
   runs?: string[];
   /** Full legend configuration that will be base64 encoded. */
   legend?: LegendConfigPayload;
-  /** Annotation to open. */
-  annotationId?: string;
-  /** Rule to open in the sidebar. */
-  ruleId?: string;
-  /** Time display configuration (base64 encoded). */
-  timeDisplayConfig?: TimeDisplayConfigPayload;
-  /** Annotation filters (base64 encoded). */
-  annotationsFilter?: AnnotationsFilterPayload;
-  /** Per-annotation visibility map (base64 encoded). */
-  annotationsVisibility?: Record<string, boolean>;
-  /** Explorer log viewer filters (base64 encoded). */
-  logViewerFilters?: LogViewerFiltersPayload;
-  /** Explorer log viewer focused log line (base64 encoded). */
-  logViewerFocusedLogLine?: LogViewerFocusedLogLinePayload;
-  /** Ruler range definition (base64 encoded). */
-  ruler?: RulerRangePayload;
-  /** Selected remote files (base64 encoded). */
-  remoteFiles?: RemoteFilesPayload;
   /** Serialized "other charts" payload (base64 encoded). */
   otherCharts?: OtherChartsPayload;
   /** Additional hash params to append verbatim. */
@@ -136,31 +73,12 @@ const HASH_KEYS = {
   assets: 'assets',
   runs: 'runs',
   legend: 'legend',
-  annotationId: 'annotationId',
-  ruleId: 'ruleId',
-  timeDisplayConfig: 'timeDisplayConfig',
-  annotationsFilter: 'annotationsFilter',
-  annotationsVisibility: 'annotationsVisibility',
-  logViewerFilters: 'logViewerFilters',
-  logViewerFocusedLogLine: 'logViewerFocusedLogLine',
-  ruler: 'ruler',
-  remoteFiles: 'remoteFiles',
   otherCharts: 'otherCharts',
 } as const;
 
 type HashKey = keyof typeof HASH_KEYS;
 
-const JSON_BASE64_KEYS: HashKey[] = [
-  'legend',
-  'timeDisplayConfig',
-  'annotationsFilter',
-  'annotationsVisibility',
-  'logViewerFilters',
-  'logViewerFocusedLogLine',
-  'ruler',
-  'remoteFiles',
-  'otherCharts',
-];
+const JSON_BASE64_KEYS: HashKey[] = ['legend', 'otherCharts'];
 
 type JsonCapableKey = (typeof JSON_BASE64_KEYS)[number];
 
@@ -221,15 +139,6 @@ function toHashValueMap(params: ExplorerLinkParams): HashValueMap {
     assets: params.assets,
     runs: params.runs,
     legend: params.legend,
-    annotationId: params.annotationId,
-    ruleId: params.ruleId,
-    timeDisplayConfig: params.timeDisplayConfig,
-    annotationsFilter: params.annotationsFilter,
-    annotationsVisibility: params.annotationsVisibility,
-    logViewerFilters: params.logViewerFilters,
-    logViewerFocusedLogLine: params.logViewerFocusedLogLine,
-    ruler: params.ruler,
-    remoteFiles: params.remoteFiles,
     otherCharts: params.otherCharts,
   };
 }
@@ -255,12 +164,6 @@ function setHashValue(hash: URLSearchParams, key: HashKey, value: unknown) {
 
 function createExplorerLink(params: ExplorerLinkParams): string {
   const basePath = normaliseBasePath(params.basePath ?? BASE_PATH_DEFAULT);
-  const searchParams = new URLSearchParams();
-
-  if (params.tabStateId) {
-    searchParams.set('tabStateId', params.tabStateId);
-  }
-
   const hashParams = new URLSearchParams();
   const hashValueMap = toHashValueMap(params);
 
@@ -276,13 +179,9 @@ function createExplorerLink(params: ExplorerLinkParams): string {
     }
   }
 
-  const searchString = searchParams.toString();
   const hashString = hashParams.toString();
 
   let url = basePath;
-  if (searchString) {
-    url += `?${searchString}`;
-  }
   if (hashString) {
     url += `#${hashString}`;
   }
@@ -382,12 +281,6 @@ export type {
   LegendConfigPayload,
   LegendChannelConfigPayload,
   LegendXAxisConfigPayload,
-  TimeDisplayConfigPayload,
-  AnnotationsFilterPayload,
-  LogViewerFiltersPayload,
-  LogViewerFocusedLogLinePayload,
-  RulerRangePayload,
-  RemoteFilesPayload,
   OtherChartsPayload,
   ExtraHashParams,
 };

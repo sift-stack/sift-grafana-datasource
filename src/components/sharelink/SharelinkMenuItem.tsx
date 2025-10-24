@@ -18,9 +18,27 @@ function openLink(link: string) {
   console.log('opening sift link: ', link);
   window.open(link, '_blank');
 }
-export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
-  const appEvents = useMemo(() => getAppEvents(), []);
 
+async function copyToClipboard(value: string) {
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+      throw new Error('Clipboard API not available');
+    }
+
+    await navigator.clipboard.writeText(value);
+    const appEvents = getAppEvents();
+    if (appEvents) {
+      appEvents.publish({
+        type: AppEvents.alertSuccess.name,
+        payload: ['Copied Sift share link to clipboard'],
+      });
+    }
+  } catch (err) {
+    console.error('Failed to copy link', err);
+  }
+}
+
+export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
   const { shareLink, disabledReason } = useMemo(() => {
     if (!apiBaseUrl) {
       return {
@@ -48,24 +66,6 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
       disabledReason: undefined,
     };
   }, [apiBaseUrl, items, timeRange]);
-
-  const copyToClipboard = async (value: string) => {
-    try {
-      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-        throw new Error('Clipboard API not available');
-      }
-
-      await navigator.clipboard.writeText(value);
-      if (appEvents) {
-        appEvents.publish({
-          type: AppEvents.alertSuccess.name,
-          payload: ['Copied Sift share link to clipboard'],
-        });
-      }
-    } catch (err) {
-      console.error('Failed to copy link', err);
-    }
-  };
 
   return (
     <InlineLabel width="auto" transparent className={className} style={{ marginLeft: 'auto' }}>

@@ -104,12 +104,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
     [onUpdateQuery]
   );
 
-  useEffect(() => {
-    if (shareLinkTimeRange) {
-      console.log('VisualSiftQueryEditor time range (ISO)', shareLinkTimeRange);
-    }
-  }, [shareLinkTimeRange]);
-
   const apiRestUrl = datasource.getApiRestUrl();
 
   if (loading) {

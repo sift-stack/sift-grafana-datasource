@@ -38,7 +38,7 @@ async function copyToClipboard(value: string) {
   }
 }
 
-export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
+export const OpenInSiftButton = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
   const { shareLink, disabledReason } = useMemo(() => {
     if (!apiBaseUrl) {
       return {
@@ -81,7 +81,6 @@ export const SharelinkMenuItem = ({ className, items, apiBaseUrl, timeRange }: S
                 }
               }}
             />
-            {/*todo: provide instructions for setting a frontend url manually*/}
             <Menu.Item
               label={shareLink ? 'Copy to Clipboard' : 'Copy (URL not set)'}
               disabled={!shareLink}

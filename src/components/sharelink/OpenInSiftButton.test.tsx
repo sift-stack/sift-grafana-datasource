@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { SharelinkMenuItem } from './SharelinkMenuItem';
+import { OpenInSiftButton } from './OpenInSiftButton';
 import { generateLinkFromQuery } from './generateLinkFromQuery';
 import { getFrontendHostname } from './getFrontendHostname';
 import { getAppEvents } from '@grafana/runtime';
@@ -21,7 +21,7 @@ const generateLinkFromQueryMock = generateLinkFromQuery as jest.MockedFunction<t
 const getFrontendHostnameMock = getFrontendHostname as jest.MockedFunction<typeof getFrontendHostname>;
 const getAppEventsMock = getAppEvents as jest.MockedFunction<typeof getAppEvents>;
 
-describe('SharelinkMenuItem', () => {
+describe('OpenInSiftButton', () => {
   let logSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
 
@@ -49,7 +49,7 @@ describe('SharelinkMenuItem', () => {
       calculatedChannels: [],
     };
 
-    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" />);
 
     expect(generateLinkFromQueryMock).toHaveBeenCalledTimes(1);
     expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
@@ -70,7 +70,7 @@ describe('SharelinkMenuItem', () => {
 
     const items = { channelIds: ['channel-1'], assetIds: ['asset-1'], runIds: ['run-1'], calculatedChannels: [] };
 
-    render(<SharelinkMenuItem items={items} apiBaseUrl={undefined} />);
+    render(<OpenInSiftButton items={items} apiBaseUrl={undefined} />);
 
     expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
 
@@ -103,7 +103,7 @@ describe('SharelinkMenuItem', () => {
       to: '2024-01-02T00:00:00Z',
     };
 
-    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" timeRange={timeRange} />);
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" timeRange={timeRange} />);
 
     expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
       'sift.example.com',
@@ -120,7 +120,7 @@ describe('SharelinkMenuItem', () => {
       calculatedChannels: [],
     };
 
-    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" />);
 
     expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
       'sift.example.com',
@@ -137,7 +137,7 @@ describe('SharelinkMenuItem', () => {
       calculatedChannels: [],
     };
 
-    render(<SharelinkMenuItem items={items} apiBaseUrl="https://api.sift.dev" />);
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" />);
 
     expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
 

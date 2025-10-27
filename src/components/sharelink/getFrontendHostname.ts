@@ -1,7 +1,7 @@
 
 
 // The sift frontend can be hosted on multiple domains, and there's no dynamic way to get the correct hostname from the backend api
-// Edit this file to test the sharelink against other endpoings
+// Edit this file to test the sharelink against other endpoints. This is needed for on prem deployments
 export function getFrontendHostname(apiBaseUrl: string): string | null {
   if (!apiBaseUrl) {
     return null;

@@ -13,7 +13,7 @@ import {
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { OpenInSiftButton } from './sharelink/OpenInSiftButton';
 import { useFetchSharelinkMetadata } from '../resources.hooks';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
@@ -136,7 +136,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <SharelinkMenuItem items={shareLinkItems} apiBaseUrl={apiRestUrl} timeRange={shareLinkTimeRange} />
+        <OpenInSiftButton items={shareLinkItems} apiBaseUrl={apiRestUrl} timeRange={shareLinkTimeRange} />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

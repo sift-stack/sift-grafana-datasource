@@ -4,15 +4,15 @@ import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
 import { SiftDataSource } from '../datasource';
 import { QueryEditor } from './query-editor/QueryEditor';
 import { QueryTypes } from '../types';
-import { SharelinkMenuItem } from './sharelink/SharelinkMenuItem';
+import { OpenInSiftButton } from './sharelink/OpenInSiftButton';
 
 // Mock the QueryEditor component
 jest.mock('./query-editor/QueryEditor', () => ({
   QueryEditor: jest.fn(() => <div data-testid="mock-query-editor" />),
 }));
 
-// Mock the SharelinkMenuItem component
-jest.mock('./sharelink/SharelinkMenuItem', () => ({
+// Mock the OpenInSiftButton component
+jest.mock('./sharelink/OpenInSiftButton', () => ({
   SharelinkMenuItem: jest.fn(() => <div data-testid="mock-sharelink-menu-item" />),
 }));
 
@@ -452,8 +452,8 @@ describe('VisualSiftQueryEditor', () => {
         expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
       });
 
-      // Verify SharelinkMenuItem was called with the correct timeRange
-      expect(SharelinkMenuItem).toHaveBeenCalledWith(
+      // Verify OpenInSiftButton was called with the correct timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
         expect.objectContaining({
           timeRange: {
             from: fromDate.toISOString(),
@@ -494,8 +494,8 @@ describe('VisualSiftQueryEditor', () => {
         expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
       });
 
-      // Verify SharelinkMenuItem was called with the stringified timeRange
-      expect(SharelinkMenuItem).toHaveBeenCalledWith(
+      // Verify OpenInSiftButton was called with the stringified timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
         expect.objectContaining({
           timeRange: {
             from: fromIsoString,
@@ -528,8 +528,8 @@ describe('VisualSiftQueryEditor', () => {
         expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
       });
 
-      // Verify SharelinkMenuItem was called with undefined timeRange
-      expect(SharelinkMenuItem).toHaveBeenCalledWith(
+      // Verify OpenInSiftButton was called with undefined timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
         expect.objectContaining({
           timeRange: undefined,
         }),

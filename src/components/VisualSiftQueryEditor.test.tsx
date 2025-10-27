@@ -443,7 +443,7 @@ describe('VisualSiftQueryEditor', () => {
           range={{
             from: fromDate as any,
             to: toDate as any,
-            raw: { from: 'now-1h', to: 'now' },
+            raw: { from: fromDate.toISOString(), to: toDate.toISOString() },
           }}
         />
       );
@@ -473,6 +473,9 @@ describe('VisualSiftQueryEditor', () => {
 
       mockDatasource.migrateQuery.mockResolvedValue(query);
 
+      const fromIsoString = '2024-01-03T12:34:56.789Z';
+      const toIsoString = '2024-01-04T12:34:56.789Z';
+
       render(
         <VisualSiftQueryEditor
           query={query as any}
@@ -480,9 +483,9 @@ describe('VisualSiftQueryEditor', () => {
           onRunQuery={mockOnRunQuery}
           datasource={mockDatasource as unknown as SiftDataSource}
           range={{
-            from: 'now-1h' as any,
-            to: 'now' as any,
-            raw: { from: 'now-1h', to: 'now' },
+            from: fromIsoString as any,
+            to: toIsoString as any,
+            raw: { from: fromIsoString, to: toIsoString },
           }}
         />
       );
@@ -495,8 +498,8 @@ describe('VisualSiftQueryEditor', () => {
       expect(SharelinkMenuItem).toHaveBeenCalledWith(
         expect.objectContaining({
           timeRange: {
-            from: 'now-1h',
-            to: 'now',
+            from: fromIsoString,
+            to: toIsoString,
           },
         }),
         expect.anything()

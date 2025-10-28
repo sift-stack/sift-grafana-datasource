@@ -13,7 +13,7 @@ jest.mock('./query-editor/QueryEditor', () => ({
 
 // Mock the OpenInSiftButton component
 jest.mock('./sharelink/OpenInSiftButton', () => ({
-  SharelinkMenuItem: jest.fn(() => <div data-testid="mock-sharelink-menu-item" />),
+  OpenInSiftButton: jest.fn(() => <div data-testid="mock-sharelink-menu-item" />),
 }));
 
 // Mock the useFetchSharelinkMetadata hook

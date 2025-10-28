@@ -168,6 +168,115 @@ func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallRe
 	})
 }
 
+type calculatedChannelAggregate struct {
+	Name               string
+	Expression         string
+	ExpressionDataType string
+	SourceChannels     []string
+	placeholderIndex   map[string]int
+}
+
+type calculatedChannelMetadata struct {
+	Name               string   `json:"name"`
+	SourceChannels     []string `json:"sourceChannels"`
+	Expression         string   `json:"expression"`
+	ExpressionDataType string   `json:"expressionDataType"`
+}
+
+func collectCalculatedAggregates(queries []channelDataQuery) (map[string]*calculatedChannelAggregate, []string) {
+	aggregates := make(map[string]*calculatedChannelAggregate)
+	order := make([]string, 0)
+
+	for _, cdq := range queries {
+		for _, calcQuery := range cdq.CalculatedChannelQueries {
+			addCalculatedQuery(aggregates, &order, calcQuery)
+		}
+	}
+
+	return aggregates, order
+}
+
+func addCalculatedQuery(aggregates map[string]*calculatedChannelAggregate, order *[]string, calcQuery calculatedChannelQuery) {
+	trimmedName := strings.TrimSpace(calcQuery.Name)
+	if trimmedName == "" {
+		return
+	}
+
+	key := calcQuery.Name
+	agg, exists := aggregates[key]
+	if !exists {
+		agg = &calculatedChannelAggregate{
+			Name:               trimmedName,
+			ExpressionDataType: "double",
+			placeholderIndex:   make(map[string]int),
+		}
+		aggregates[key] = agg
+		*order = append(*order, key)
+	}
+
+	agg.mergeExpression(calcQuery.Expression)
+	agg.mergeReferenceQueries(calcQuery.ChannelReferences)
+}
+
+func (a *calculatedChannelAggregate) mergeExpression(expression string) {
+	if trimmed := strings.TrimSpace(expression); trimmed != "" {
+		a.Expression = trimmed
+	}
+}
+
+func (a *calculatedChannelAggregate) mergeReferenceQueries(refs []channelReferenceQuery) {
+	if len(refs) != len(a.SourceChannels) {
+		newSource := make([]string, len(refs))
+		newIndex := make(map[string]int, len(refs))
+		for idx, ref := range refs {
+			newIndex[ref.ChannelReference] = idx
+			if existingIdx, ok := a.placeholderIndex[ref.ChannelReference]; ok && existingIdx < len(a.SourceChannels) {
+				newSource[idx] = a.SourceChannels[existingIdx]
+			}
+			if ref.ChannelId != "" {
+				newSource[idx] = ref.ChannelId
+			}
+		}
+		a.SourceChannels = newSource
+		a.placeholderIndex = newIndex
+		return
+	}
+
+	for idx, ref := range refs {
+		a.placeholderIndex[ref.ChannelReference] = idx
+		if ref.ChannelId != "" && a.SourceChannels[idx] == "" {
+			a.SourceChannels[idx] = ref.ChannelId
+		}
+	}
+}
+
+func (a *calculatedChannelAggregate) fillMissingSources(refs []expressionChannelReference) {
+	for _, ref := range refs {
+		if pos, ok := a.placeholderIndex[ref.ChannelReference]; ok {
+			if pos < len(a.SourceChannels) && a.SourceChannels[pos] == "" {
+				a.SourceChannels[pos] = ref.ChannelId
+			}
+		}
+	}
+}
+
+func (a *calculatedChannelAggregate) metadataIfComplete() (calculatedChannelMetadata, bool) {
+	sources := make([]string, len(a.SourceChannels))
+	copy(sources, a.SourceChannels)
+	for _, channelID := range sources {
+		if strings.TrimSpace(channelID) == "" {
+			return calculatedChannelMetadata{}, false
+		}
+	}
+
+	return calculatedChannelMetadata{
+		Name:               a.Name,
+		SourceChannels:     sources,
+		Expression:         a.Expression,
+		ExpressionDataType: a.ExpressionDataType,
+	}, true
+}
+
 func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	log.DefaultLogger.Debug("resolveQueryToSiftMetadata request", "body", string(req.Body))
 
@@ -181,25 +290,6 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 	}
 
 	metadataInput := *queryModel
-	//hasCalculatedChannels := false
-	//for _, cdq := range queryModel.ChannelDataQueries {
-	//	if len(cdq.CalculatedChannelQueries) > 0 {
-	//		hasCalculatedChannels = true
-	//		break
-	//	}
-	//}
-
-	//if hasCalculatedChannels {
-	//	sanitizedModel := *queryModel
-	//	sanitizedModel.ChannelDataQueries = make([]channelDataQuery, len(queryModel.ChannelDataQueries))
-	//	for i, cdq := range queryModel.ChannelDataQueries {
-	//		sanitizedCDQ := cdq
-	//		sanitizedCDQ.CalculatedChannelQueries = nil
-	//		sanitizedModel.ChannelDataQueries[i] = sanitizedCDQ
-	//	}
-	//	metadataInput = sanitizedModel
-	//}
-
 	metadata, err := generateQueryMetadata(req.PluginContext, metadataInput, d)
 	if err != nil {
 		log.DefaultLogger.Error("resolveQueryToSiftMetadata metadata error", "error", err)
@@ -216,123 +306,28 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		"channelIds", metadata.ChannelIds,
 	)
 
-	type calculatedChannelAggregate struct {
-		Name               string
-		Expression         string
-		ExpressionDataType string
-		SourceChannels     []string
-		placeholderIndex   map[string]int
-	}
-
-	type calculatedChannelMetadata struct {
-		Name               string   `json:"name"`
-		SourceChannels     []string `json:"sourceChannels"`
-		Expression         string   `json:"expression"`
-		ExpressionDataType string   `json:"expressionDataType"`
-	}
-
-	calculatedAggregates := make(map[string]*calculatedChannelAggregate)
-	calculatedOrder := make([]string, 0)
-
-	for _, cdq := range queryModel.ChannelDataQueries {
-		for _, calcQuery := range cdq.CalculatedChannelQueries {
-			rawName := calcQuery.Name
-			trimmedName := strings.TrimSpace(rawName)
-			if trimmedName == "" {
-				continue
-			}
-
-			aggregate, exists := calculatedAggregates[rawName]
-			if !exists {
-				aggregate = &calculatedChannelAggregate{
-					Name:               trimmedName,
-					Expression:         strings.TrimSpace(calcQuery.Expression),
-					ExpressionDataType: "double",
-					SourceChannels:     make([]string, len(calcQuery.ChannelReferences)),
-					placeholderIndex:   make(map[string]int, len(calcQuery.ChannelReferences)),
-				}
-				for idx, ref := range calcQuery.ChannelReferences {
-					aggregate.placeholderIndex[ref.ChannelReference] = idx
-					if ref.ChannelId != "" {
-						aggregate.SourceChannels[idx] = ref.ChannelId
-					}
-				}
-				calculatedAggregates[rawName] = aggregate
-				calculatedOrder = append(calculatedOrder, rawName)
-			} else {
-				if trimmedExpression := strings.TrimSpace(calcQuery.Expression); trimmedExpression != "" {
-					aggregate.Expression = trimmedExpression
-				}
-
-				if len(calcQuery.ChannelReferences) != len(aggregate.SourceChannels) {
-					newSource := make([]string, len(calcQuery.ChannelReferences))
-					newIndex := make(map[string]int, len(calcQuery.ChannelReferences))
-					for idx, ref := range calcQuery.ChannelReferences {
-						newIndex[ref.ChannelReference] = idx
-						if existingIdx, ok := aggregate.placeholderIndex[ref.ChannelReference]; ok && existingIdx < len(aggregate.SourceChannels) {
-							newSource[idx] = aggregate.SourceChannels[existingIdx]
-						}
-						if ref.ChannelId != "" {
-							newSource[idx] = ref.ChannelId
-						}
-					}
-					aggregate.SourceChannels = newSource
-					aggregate.placeholderIndex = newIndex
-				} else {
-					for idx, ref := range calcQuery.ChannelReferences {
-						aggregate.placeholderIndex[ref.ChannelReference] = idx
-						if ref.ChannelId != "" && aggregate.SourceChannels[idx] == "" {
-							aggregate.SourceChannels[idx] = ref.ChannelId
-						}
-					}
-				}
-			}
-		}
-	}
-
+	calculatedAggregates, calculatedOrder := collectCalculatedAggregates(queryModel.ChannelDataQueries)
 	calculatedChannels := make([]calculatedChannelMetadata, 0, len(calculatedAggregates))
+
 	if len(calculatedAggregates) > 0 {
 		if _, calculatedKeys, err := generateQueries(req.PluginContext, metadataInput, d); err != nil {
 			log.DefaultLogger.Error("resolveQueryToSiftMetadata calculated channel lookup error", "error", err)
 		} else {
 			for _, key := range calculatedKeys {
-				aggregate, ok := calculatedAggregates[key.channelName]
-				if !ok {
-					continue
-				}
-				for _, ref := range key.channelReferences {
-					if pos, ok := aggregate.placeholderIndex[ref.ChannelReference]; ok {
-						if pos < len(aggregate.SourceChannels) && aggregate.SourceChannels[pos] == "" {
-							aggregate.SourceChannels[pos] = ref.ChannelId
-						}
-					}
+				if aggregate, ok := calculatedAggregates[key.channelName]; ok && aggregate != nil {
+					aggregate.fillMissingSources(key.channelReferences)
 				}
 			}
 		}
 
 		for _, name := range calculatedOrder {
-			aggregate, ok := calculatedAggregates[name]
-			if !ok {
+			aggregate := calculatedAggregates[name]
+			if aggregate == nil {
 				continue
 			}
-			sourceChannels := make([]string, len(aggregate.SourceChannels))
-			copy(sourceChannels, aggregate.SourceChannels)
-			allResolved := true
-			for _, channelID := range sourceChannels {
-				if strings.TrimSpace(channelID) == "" {
-					allResolved = false
-					break
-				}
+			if metadata, ok := aggregate.metadataIfComplete(); ok {
+				calculatedChannels = append(calculatedChannels, metadata)
 			}
-			if !allResolved {
-				continue
-			}
-			calculatedChannels = append(calculatedChannels, calculatedChannelMetadata{
-				Name:               aggregate.Name,
-				SourceChannels:     sourceChannels,
-				Expression:         aggregate.Expression,
-				ExpressionDataType: aggregate.ExpressionDataType,
-			})
 		}
 	}
 

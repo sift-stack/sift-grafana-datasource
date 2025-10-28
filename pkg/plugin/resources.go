@@ -211,9 +211,9 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 
 	log.DefaultLogger.Debug(
 		"resolveQueryToSiftMetadata summary",
-		"assetIds", metadata.AssetIDs,
-		"runIds", metadata.RunIDs,
-		"channelIds", metadata.ChannelIDs,
+		"assetIds", metadata.AssetIds,
+		"runIds", metadata.RunIds,
+		"channelIds", metadata.ChannelIds,
 	)
 
 	type calculatedChannelAggregate struct {
@@ -342,9 +342,9 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		ChannelIDs         []string                    `json:"channelIds"`
 		CalculatedChannels []calculatedChannelMetadata `json:"calculatedChannels,omitempty"`
 	}{
-		AssetIDs:   metadata.AssetIDs,
-		RunIDs:     metadata.RunIDs,
-		ChannelIDs: metadata.ChannelIDs,
+		AssetIDs:   metadata.AssetIds,
+		RunIDs:     metadata.RunIds,
+		ChannelIDs: metadata.ChannelIds,
 	}
 
 	if len(calculatedChannels) > 0 {

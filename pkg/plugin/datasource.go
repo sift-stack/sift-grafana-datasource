@@ -362,9 +362,9 @@ type channelSearchKey struct {
 }
 
 type queryMetadata struct {
-	AssetIDs   []string `json:"assetIds"`
-	RunIDs     []string `json:"runIds"`
-	ChannelIDs []string `json:"channelIds"`
+	AssetIds   []string `json:"assetIds"`
+	RunIds     []string `json:"runIds"`
+	ChannelIds []string `json:"channelIds"`
 }
 
 func getApiUrl(dataSourceInstanceSettings *backend.DataSourceInstanceSettings) (*url.URL, error) {
@@ -504,7 +504,7 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 }
 
 func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasource) (queryMetadata, error) {
-	assetIDSet := make(map[string]struct{})
+	assetIdSet := make(map[string]struct{})
 	runIDSet := make(map[string]struct{})
 	channelIDSet := make(map[string]struct{})
 
@@ -539,9 +539,9 @@ func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDa
 			return queryMetadata{}, fmt.Errorf("no assets found for query: %v", assetIdQueries)
 		}
 
-		assetIDsForRuns := uniqueStrings(assetIds)
-		for _, assetId := range assetIDsForRuns {
-			assetIDSet[assetId] = struct{}{}
+		assetIdsForRuns := uniqueStrings(assetIds)
+		for _, assetId := range assetIdsForRuns {
+			assetIdSet[assetId] = struct{}{}
 		}
 
 		runIds := []string{}
@@ -551,7 +551,7 @@ func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDa
 			if runQuery.RunId != "" {
 				runIdQueries = append(runIdQueries, runQuery.RunId)
 			} else if runQuery.RunName != "" {
-				foundRunIds, err := d.getRunIdsByName(pCtx, assetIDsForRuns, runQuery.RunName, runQuery.NameAsRegex)
+				foundRunIds, err := d.getRunIdsByName(pCtx, assetIdsForRuns, runQuery.RunName, runQuery.NameAsRegex)
 				if err != nil {
 					return queryMetadata{}, fmt.Errorf("error looking up runs: %w", err)
 				}
@@ -572,22 +572,22 @@ func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDa
 		}
 
 		if len(cdq.ChannelQueries) > 0 {
-			if err := collectChannelIDsFromChannelQueries(pCtx, cdq, assetIDsForRuns, d, validDataTypes, channelIDSet); err != nil {
+			if err := collectChannelIDsFromChannelQueries(pCtx, cdq, assetIdsForRuns, d, validDataTypes, channelIDSet); err != nil {
 				return queryMetadata{}, err
 			}
 		}
 
 		if len(cdq.CalculatedChannelQueries) > 0 {
-			if err := collectChannelIDsFromCalculatedQueries(pCtx, cdq, assetIDsForRuns, d, validDataTypes, channelIDSet); err != nil {
+			if err := collectChannelIDsFromCalculatedQueries(pCtx, cdq, assetIdsForRuns, d, validDataTypes, channelIDSet); err != nil {
 				return queryMetadata{}, err
 			}
 		}
 	}
 
 	metadata := queryMetadata{
-		AssetIDs:   sortedKeys(assetIDSet),
-		RunIDs:     sortedKeys(runIDSet),
-		ChannelIDs: sortedKeys(channelIDSet),
+		AssetIds:   sortedKeys(assetIdSet),
+		RunIds:     sortedKeys(runIDSet),
+		ChannelIds: sortedKeys(channelIDSet),
 	}
 
 	return metadata, nil
@@ -596,7 +596,7 @@ func generateQueryMetadata(pCtx backend.PluginContext, fqm queryModel, d *SiftDa
 func collectChannelIDsFromChannelQueries(
 	pCtx backend.PluginContext,
 	cdq channelDataQuery,
-	assetIDs []string,
+	assetIds []string,
 	d *SiftDatasource,
 	validDataTypes map[string]struct{},
 	channelIDSet map[string]struct{},
@@ -616,7 +616,7 @@ func collectChannelIDsFromChannelQueries(
 		exactSearches := []channelSearchKey{}
 		regexSearches := []channelSearchKey{}
 
-		for _, assetId := range assetIDs {
+		for _, assetId := range assetIds {
 			if assetId == "" {
 				continue
 			}
@@ -665,7 +665,7 @@ func collectChannelIDsFromChannelQueries(
 func collectChannelIDsFromCalculatedQueries(
 	pCtx backend.PluginContext,
 	cdq channelDataQuery,
-	assetIDs []string,
+	assetIds []string,
 	d *SiftDatasource,
 	validDataTypes map[string]struct{},
 	channelIDSet map[string]struct{},
@@ -691,7 +691,7 @@ func collectChannelIDsFromCalculatedQueries(
 				continue
 			}
 
-			for _, assetId := range assetIDs {
+			for _, assetId := range assetIds {
 				if assetId == "" {
 					continue
 				}

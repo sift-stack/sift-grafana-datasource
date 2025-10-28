@@ -1970,9 +1970,9 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 				},
 			},
 			expect: queryMetadata{
-				AssetIDs:   []string{"asset1"},
-				RunIDs:     []string{"run1"},
-				ChannelIDs: []string{"channel1"},
+				AssetIds:   []string{"asset1"},
+				RunIds:     []string{"run1"},
+				ChannelIds: []string{"channel1"},
 			},
 		},
 		{
@@ -1990,9 +1990,9 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 				},
 			},
 			expect: queryMetadata{
-				AssetIDs:   []string{"asset1"},
-				ChannelIDs: []string{"channel1", "channel2"},
-				RunIDs:     []string{},
+				AssetIds:   []string{"asset1"},
+				ChannelIds: []string{"channel1", "channel2"},
+				RunIds:     []string{},
 			},
 		},
 		{
@@ -2010,9 +2010,9 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 				},
 			},
 			expect: queryMetadata{
-				AssetIDs:   []string{"asset1"},
-				ChannelIDs: []string{"channel1"},
-				RunIDs:     []string{},
+				AssetIds:   []string{"asset1"},
+				ChannelIds: []string{"channel1"},
+				RunIds:     []string{},
 			},
 		},
 		{
@@ -2043,9 +2043,9 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 				}
 			}(),
 			expect: queryMetadata{
-				AssetIDs:   []string{"asset1"},
-				ChannelIDs: []string{"channel1", "channel2"},
-				RunIDs:     []string{},
+				AssetIds:   []string{"asset1"},
+				ChannelIds: []string{"channel1", "channel2"},
+				RunIds:     []string{},
 			},
 		},
 		{
@@ -2076,9 +2076,9 @@ func (s *DatasourceTestSuite) TestGenerateQueryMetadata() {
 			}
 
 			s.NoError(err)
-			s.Equal(tc.expect.AssetIDs, metadata.AssetIDs)
-			s.Equal(tc.expect.RunIDs, metadata.RunIDs)
-			s.Equal(tc.expect.ChannelIDs, metadata.ChannelIDs)
+			s.Equal(tc.expect.AssetIds, metadata.AssetIds)
+			s.Equal(tc.expect.RunIds, metadata.RunIds)
+			s.Equal(tc.expect.ChannelIds, metadata.ChannelIds)
 		})
 	}
 }

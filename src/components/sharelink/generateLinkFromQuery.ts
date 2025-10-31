@@ -228,7 +228,6 @@ export function generateLinkFromQuery(hostname: string, items: SharelinkItems, t
           unitAbbreviatedName: '',
         },
       };
-      console.log(`created legendChannel ${channelKeyName}: `, legendChannels[channelKeyName]);
     });
   }
 

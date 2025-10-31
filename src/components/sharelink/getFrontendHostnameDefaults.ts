@@ -10,8 +10,6 @@ export function getFrontendHostnameDefaults(apiBaseUrl: string): string | null {
   const cleanUrl = apiBaseUrl.replace(/^https?:\/\//, '').trim();
 
   switch (cleanUrl) {
-    case 'api.development.siftstack.com':
-      return 'app.development.siftstack.com';
     case 'api.siftstack.com':
       return 'app.siftstack.com';
     case 'gov.api.siftstack.com':

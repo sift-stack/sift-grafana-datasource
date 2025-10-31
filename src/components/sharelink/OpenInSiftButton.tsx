@@ -11,7 +11,8 @@ interface SharelinkMenuItemProps {
   items?: SharelinkItems;
   className?: string;
   apiBaseUrl?: string;
-  timeRange?: SharelinkTimeRange
+  frontendUrl?: string;
+  timeRange?: SharelinkTimeRange;
 }
 
 function openLink(link: string) {
@@ -38,9 +39,11 @@ async function copyToClipboard(value: string) {
   }
 }
 
-export const OpenInSiftButton = ({ className, items, apiBaseUrl, timeRange }: SharelinkMenuItemProps) => {
+export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, timeRange }: SharelinkMenuItemProps) => {
   const { shareLink, disabledReason } = useMemo(() => {
-    if (!apiBaseUrl) {
+    const trimmedFrontendUrl = frontendUrl?.trim();
+
+    if (!apiBaseUrl && !trimmedFrontendUrl) {
       return {
         shareLink: null,
         disabledReason: 'Configure the Sift API REST URL to enable share links',
@@ -54,7 +57,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, timeRange }: Sh
       };
     }
 
-    const hostname = getFrontendHostnameDefaults(apiBaseUrl);
+    const hostname = trimmedFrontendUrl || getFrontendHostnameDefaults(apiBaseUrl ?? '');
     if (!hostname) {
       return {
         shareLink: null,
@@ -65,7 +68,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, timeRange }: Sh
       shareLink: generateLinkFromQuery(hostname, items, timeRange),
       disabledReason: undefined,
     };
-  }, [apiBaseUrl, items, timeRange]);
+  }, [apiBaseUrl, frontendUrl, items, timeRange]);
 
   return (
     <InlineLabel width="auto" transparent className={className} style={{ marginLeft: 'auto' }}>

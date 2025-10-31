@@ -10,7 +10,7 @@ jest.mock('./generateLinkFromQuery', () => ({
 }));
 
 jest.mock('./getFrontendHostnameDefaults', () => ({
-  getFrontendHostname: jest.fn(),
+  getFrontendHostnameDefaults: jest.fn(),
 }));
 
 jest.mock('@grafana/runtime', () => ({
@@ -18,7 +18,9 @@ jest.mock('@grafana/runtime', () => ({
 }));
 
 const generateLinkFromQueryMock = generateLinkFromQuery as jest.MockedFunction<typeof generateLinkFromQuery>;
-const getFrontendHostnameMock = getFrontendHostnameDefaults as jest.MockedFunction<typeof getFrontendHostnameDefaults>;
+const getFrontendHostnameDefaultsMock = getFrontendHostnameDefaults as jest.MockedFunction<
+  typeof getFrontendHostnameDefaults
+>;
 const getAppEventsMock = getAppEvents as jest.MockedFunction<typeof getAppEvents>;
 
 describe('OpenInSiftButton', () => {
@@ -28,7 +30,7 @@ describe('OpenInSiftButton', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     generateLinkFromQueryMock.mockReturnValue('https://sift.example.com/explorer');
-    getFrontendHostnameMock.mockReturnValue('sift.example.com');
+    getFrontendHostnameDefaultsMock.mockReturnValue('sift.example.com');
     getAppEventsMock.mockReturnValue(null as any);
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -51,9 +53,42 @@ describe('OpenInSiftButton', () => {
 
     render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" />);
 
+    expect(getFrontendHostnameDefaultsMock).toHaveBeenCalledWith('https://api.sift.dev');
     expect(generateLinkFromQueryMock).toHaveBeenCalledTimes(1);
     expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
       'sift.example.com',
+      items,
+      undefined
+    );
+
+    const button = screen.getByRole('button', { name: 'Open in Sift' });
+    fireEvent.click(button);
+
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    openSpy.mockRestore();
+  });
+
+  it('uses configured frontendUrl when provided', () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
+
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    render(
+      <OpenInSiftButton
+        items={items}
+        apiBaseUrl="https://api.sift.dev"
+        frontendUrl="https://frontend.sift.dev"
+      />
+    );
+
+    expect(getFrontendHostnameDefaultsMock).not.toHaveBeenCalled();
+    expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
+      'https://frontend.sift.dev',
       items,
       undefined
     );
@@ -73,6 +108,7 @@ describe('OpenInSiftButton', () => {
     render(<OpenInSiftButton items={items} apiBaseUrl={undefined} />);
 
     expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
+    expect(getFrontendHostnameDefaultsMock).not.toHaveBeenCalled();
 
     expect(openSpy).not.toHaveBeenCalled();
 
@@ -87,6 +123,32 @@ describe('OpenInSiftButton', () => {
       expect(screen.getByRole('menuitem', { name: /Copy \(URL not set\)/i })).toBeDisabled();
     });
 
+    openSpy.mockRestore();
+  });
+
+  it('allows share link when frontendUrl is provided without apiBaseUrl', () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
+
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    render(<OpenInSiftButton items={items} frontendUrl="https://frontend-only.sift.dev" />);
+
+    expect(getFrontendHostnameDefaultsMock).not.toHaveBeenCalled();
+    expect(generateLinkFromQueryMock).toHaveBeenCalledWith(
+      'https://frontend-only.sift.dev',
+      items,
+      undefined
+    );
+
+    const button = screen.getByRole('button', { name: 'Open in Sift' });
+    fireEvent.click(button);
+
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
     openSpy.mockRestore();
   });
 

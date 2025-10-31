@@ -32,6 +32,7 @@ jest.mock('../resources.hooks', () => ({
 const createMockDatasource = () => ({
   migrateQuery: jest.fn(),
   getApiRestUrl: jest.fn(() => 'https://sift.example.com'),
+  getFrontendUrl: jest.fn(() => undefined),
   clearCache: jest.fn(),
   postResource: jest.fn().mockResolvedValue(undefined),
 });
@@ -72,6 +73,12 @@ describe('VisualSiftQueryEditor', () => {
       await waitFor(() => {
         expect(mockDatasource.migrateQuery).toHaveBeenCalledWith(initialQuery);
         expect(mockOnChange).toHaveBeenCalledWith(migratedQuery);
+      });
+
+      const openInSiftButtonProps = (OpenInSiftButton as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(openInSiftButtonProps).toMatchObject({
+        apiBaseUrl: 'https://sift.example.com',
+        frontendUrl: undefined,
       });
     });
 

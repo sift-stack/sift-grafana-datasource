@@ -105,6 +105,9 @@ export const VisualSiftQueryEditor = (props: Props) => {
   );
 
   const apiRestUrl = datasource.getApiRestUrl();
+  const frontendUrl = typeof datasource.getFrontendUrl === 'function'
+    ? datasource.getFrontendUrl()
+    : undefined;
 
   if (loading) {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
@@ -136,7 +139,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <OpenInSiftButton items={shareLinkItems} apiBaseUrl={apiRestUrl} timeRange={shareLinkTimeRange} />
+        <OpenInSiftButton
+          items={shareLinkItems}
+          apiBaseUrl={apiRestUrl}
+          frontendUrl={frontendUrl}
+          timeRange={shareLinkTimeRange}
+        />
       </InlineFieldRow>
       <QueryEditor
         datasource={datasource}

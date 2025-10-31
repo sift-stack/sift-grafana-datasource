@@ -3,7 +3,7 @@ import { SiftDataSource } from './datasource';
 import { Asset, Run, Channel, AssetGrafanaVariable, SharelinkItems, SharelinkMetadataResponse, SiftQuery } from './types';
 import { getTemplateSrv, getAppEvents, RefreshEvent } from '@grafana/runtime';
 import { TypedVariableModel, BusEventWithPayload } from '@grafana/data';
-import { CELUtil } from './utils';
+import { CELUtil, replaceTemplateVariablesInQuery } from './utils';
 import { debounce } from 'lodash';
 import leven from 'leven';
 
@@ -344,11 +344,6 @@ export const useFetchSharelinkMetadata = (
   shareLinkItems: SharelinkItems | undefined;
 } => {
   const [shareLinkItems, setShareLinkItems] = useState<SharelinkItems | undefined>();
-  const queryRef = useRef(query);
-
-  useEffect(() => {
-    queryRef.current = query;
-  }, [query]);
 
   useEffect(() => {
     if (!enabled) {
@@ -357,9 +352,9 @@ export const useFetchSharelinkMetadata = (
 
     const fetchMetadata = async () => {
       const resourcePath = 'resolve-query-to-sift-metadata';
-      const latestQuery = queryRef.current;
+      const newQuery = replaceTemplateVariablesInQuery(query, {});
       try {
-        const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, latestQuery);
+        const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, newQuery);
 
         const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
         const hasCalculatedChannels =

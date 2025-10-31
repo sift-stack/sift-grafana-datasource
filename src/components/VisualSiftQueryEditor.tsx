@@ -150,13 +150,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
             }}
           />
         </InlineLabel>
-        <OpenInSiftButton
-          items={shareLinkItems}
-          apiBaseUrl={apiRestUrl}
-          frontendUrl={frontendUrl}
-          timeRange={shareLinkTimeRange}
-        />
-
         <InlineLabel width="auto" transparent>
           <div
             onClick={() => setShowMoreOptions(!showMoreOptions)}
@@ -166,6 +159,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
             <span>More Options</span>
           </div>
         </InlineLabel>
+        <OpenInSiftButton
+          items={shareLinkItems}
+          apiBaseUrl={apiRestUrl}
+          frontendUrl={frontendUrl}
+          timeRange={shareLinkTimeRange}
+        />
 
       </InlineFieldRow>
       {showMoreOptions && (

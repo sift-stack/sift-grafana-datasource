@@ -79,6 +79,7 @@ export const DEFAULT_QUERY: Partial<SiftQuery> = {
  */
 export interface SiftDataSourceOptions extends DataSourceJsonData {
   url?: string;
+  frontendUrl?: string;
 }
 
 /**

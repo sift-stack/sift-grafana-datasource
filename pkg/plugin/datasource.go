@@ -188,7 +188,8 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 }
 
 type jsonData struct {
-	Url string `json:"url"`
+	Url         string `json:"url"`
+	FrontendUrl string `json:"frontendUrl"`
 }
 
 type commonQueryProperties struct {

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Button, InlineLabel, Menu, WithContextMenu } from '@grafana/ui';
 import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
-import { getFrontendHostname } from './getFrontendHostname';
+import { getFrontendHostnameDefaults } from './getFrontendHostnameDefaults';
 import { generateLinkFromQuery } from './generateLinkFromQuery';
 import type { SharelinkItems, SharelinkTimeRange } from '../../types';
 import { SquareShareIcon } from '../common/CustomIcons';
@@ -54,7 +54,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, timeRange }: Sh
       };
     }
 
-    const hostname = getFrontendHostname(apiBaseUrl);
+    const hostname = getFrontendHostnameDefaults(apiBaseUrl);
     if (!hostname) {
       return {
         shareLink: null,

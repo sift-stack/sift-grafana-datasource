@@ -2,14 +2,14 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { OpenInSiftButton } from './OpenInSiftButton';
 import { generateLinkFromQuery } from './generateLinkFromQuery';
-import { getFrontendHostname } from './getFrontendHostname';
+import { getFrontendHostnameDefaults } from './getFrontendHostnameDefaults';
 import { getAppEvents } from '@grafana/runtime';
 
 jest.mock('./generateLinkFromQuery', () => ({
   generateLinkFromQuery: jest.fn(),
 }));
 
-jest.mock('./getFrontendHostname', () => ({
+jest.mock('./getFrontendHostnameDefaults', () => ({
   getFrontendHostname: jest.fn(),
 }));
 
@@ -18,7 +18,7 @@ jest.mock('@grafana/runtime', () => ({
 }));
 
 const generateLinkFromQueryMock = generateLinkFromQuery as jest.MockedFunction<typeof generateLinkFromQuery>;
-const getFrontendHostnameMock = getFrontendHostname as jest.MockedFunction<typeof getFrontendHostname>;
+const getFrontendHostnameMock = getFrontendHostnameDefaults as jest.MockedFunction<typeof getFrontendHostnameDefaults>;
 const getAppEventsMock = getAppEvents as jest.MockedFunction<typeof getAppEvents>;
 
 describe('OpenInSiftButton', () => {

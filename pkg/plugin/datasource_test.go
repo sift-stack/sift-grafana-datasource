@@ -1111,7 +1111,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithMultipleDataTypes() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false)
+	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1179,7 +1179,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesCalculatedChannels() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false)
+	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1232,7 +1232,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesGroupByRun() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false)
+	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1943,4 +1943,223 @@ func (s *DatasourceTestSuite) channelsMatch(expected, actual *siftApiChannel) bo
 		return false
 	}
 	return true
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayBoth() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ACTIVE", Key: 1},
+						{Name: "INACTIVE", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 2}
+			]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayBoth)
+	s.NoError(err)
+
+	// Verify frame structure - should have both _string and _value fields
+	s.Equal(3, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Status_string", frame.Fields[1].Name)
+	s.Equal("Status_value", frame.Fields[2].Name)
+
+	// Verify enum string values
+	s.Equal("ACTIVE", *frame.Fields[1].At(0).(*string))
+	s.Equal("INACTIVE", *frame.Fields[1].At(1).(*string))
+
+	// Verify enum numeric values
+	s.Equal(uint32(1), *frame.Fields[2].At(0).(*uint32))
+	s.Equal(uint32(2), *frame.Fields[2].At(1).(*uint32))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayString() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ACTIVE", Key: 1},
+						{Name: "INACTIVE", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 2}
+			]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	s.NoError(err)
+
+	// Verify frame structure - should only have string field without suffix
+	s.Equal(2, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Status", frame.Fields[1].Name) // No _string suffix
+
+	// Verify enum string values
+	s.Equal("ACTIVE", *frame.Fields[1].At(0).(*string))
+	s.Equal("INACTIVE", *frame.Fields[1].At(1).(*string))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayValue() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ACTIVE", Key: 1},
+						{Name: "INACTIVE", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 2}
+			]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayValue)
+	s.NoError(err)
+
+	// Verify frame structure - should only have value field without suffix
+	s.Equal(2, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Status", frame.Fields[1].Name) // No _value suffix
+
+	// Verify enum numeric values
+	s.Equal(uint32(1), *frame.Fields[1].At(0).(*uint32))
+	s.Equal(uint32(2), *frame.Fields[1].At(1).(*uint32))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayMixedChannels() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ON", Key: 1},
+						{Name: "OFF", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1}
+			]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel2",
+					Name:      "Temperature",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 23.5}
+			]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	s.NoError(err)
+
+	// Verify frame structure - enum should be filtered, non-enum should remain
+	s.Equal(3, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Status", frame.Fields[1].Name)      // Enum without suffix
+	s.Equal("Temperature", frame.Fields[2].Name) // Non-enum unchanged
+
+	// Verify enum string value
+	s.Equal("ON", *frame.Fields[1].At(0).(*string))
+
+	// Verify temperature value
+	s.Equal(23.5, *frame.Fields[2].At(0).(*float64))
 }

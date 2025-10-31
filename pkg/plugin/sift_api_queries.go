@@ -208,7 +208,7 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 		Queries:   subQueries,
 		StartTime: query.TimeRange.From.Format(time.RFC3339Nano),
 		EndTime:   query.TimeRange.To.Format(time.RFC3339Nano),
-		SampleMs:  query.TimeRange.To.Sub(query.TimeRange.From).Milliseconds() / int64(query.MaxDataPoints),
+		SampleMs:  query.Interval.Milliseconds(),
 		PageSize:  10_000,
 	}
 

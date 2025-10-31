@@ -1,7 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { QueryEditorProps } from '@grafana/data';
-import { Checkbox, IconButton, InlineField, InlineFieldRow, InlineLabel, RadioButtonGroup } from '@grafana/ui';
+import {
+  Checkbox,
+  Icon,
+  IconButton,
+  InlineField,
+  InlineFieldRow,
+  InlineLabel,
+  RadioButtonGroup,
+  Select,
+} from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
 import {
   ChannelDataQuery,
@@ -9,6 +18,7 @@ import {
   QueryTypes,
   SiftDataSourceOptions,
   SiftQuery,
+  EnumDisplayType
 } from '../types';
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
@@ -26,6 +36,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [queryMode, setQueryMode] = useState<QueryType>(QueryTypes.CHANNEL);
   const [lastQuery, setLastQuery] = useState<string>('');
   const [initialRender, setInitialRender] = useState(true);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const queryRef = useRef(query);
   const shareLinkTimeRange = useMemo(() => {
@@ -145,7 +156,42 @@ export const VisualSiftQueryEditor = (props: Props) => {
           frontendUrl={frontendUrl}
           timeRange={shareLinkTimeRange}
         />
+
+        <InlineLabel width="auto" transparent>
+          <div
+            onClick={() => setShowMoreOptions(!showMoreOptions)}
+            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', userSelect: 'none' }}
+          >
+            <Icon name={showMoreOptions ? 'angle-down' : 'angle-right'} />
+            <span>More Options</span>
+          </div>
+        </InlineLabel>
+
       </InlineFieldRow>
+      {showMoreOptions && (
+        <Section label="Options">
+          <InlineField
+            label="Enum Display"
+            labelWidth={15}
+            tooltip="Choose which enum values are returned: Value (integer, String (name), or Both"
+          >
+            <Select
+              options={[
+                {
+                  label: 'Both',
+                  value: 'both',
+                  description: 'E.g. chan-name_string and chan-name_value',
+                },
+                { label: 'String only', value: 'string' },
+                { label: 'Value only', value: 'value' },
+              ]}
+              value={query.enumDisplay ?? 'both'}
+              onChange={(v) => onUpdateQuery({ ...query, enumDisplay: v.value as EnumDisplayType })}
+              width={20}
+            />
+          </InlineField>
+        </Section>
+      )}
       <QueryEditor
         datasource={datasource}
         queryType={queryMode}

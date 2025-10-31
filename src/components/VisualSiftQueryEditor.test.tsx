@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
 import { SiftDataSource } from '../datasource';
 import { QueryEditor } from './query-editor/QueryEditor';
@@ -542,6 +543,177 @@ describe('VisualSiftQueryEditor', () => {
         }),
         expect.anything()
       );
+    });
+  });
+
+  describe('Enum Display Functionality', () => {
+    it('shows enum display select when More Options is expanded', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+        enumDisplay: 'both',
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      // Wait for the component to render after migration
+      await waitFor(() => {
+        expect(screen.getByText('More Options')).toBeInTheDocument();
+      });
+
+      // Initially, enum display should not be visible
+      expect(screen.queryByLabelText('Enum Display')).not.toBeInTheDocument();
+
+      // Click on More Options to expand
+      const moreOptionsButton = screen.getByText('More Options');
+      fireEvent.click(moreOptionsButton);
+
+      // Now enum display should be visible
+      await waitFor(() => {
+        expect(screen.getByText('Enum Display')).toBeInTheDocument();
+      });
+    });
+
+    it('updates enumDisplay when select value changes', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+        enumDisplay: 'both',
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      // Wait for the component to render after migration
+      await waitFor(() => {
+        expect(screen.getByText('More Options')).toBeInTheDocument();
+      });
+
+      // Click on More Options to expand
+      const moreOptionsButton = screen.getByText('More Options');
+      fireEvent.click(moreOptionsButton);
+
+      // Wait for the enum display to be visible
+      await waitFor(() => {
+        expect(screen.getByText('Enum Display')).toBeInTheDocument();
+      });
+
+      // Find the select input and click to open the menu
+      const selectInput = screen.getByRole('combobox');
+      expect(selectInput).toBeInTheDocument();
+      await userEvent.click(selectInput);
+
+      // Click on the 'String only' option
+      const stringOption = screen.getByText('String only');
+      await userEvent.click(stringOption);
+
+      // Verify that onChange was called with updated enumDisplay
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            enumDisplay: 'string',
+          })
+        );
+      });
+
+      // Verify that onRunQuery was called
+      expect(mockOnRunQuery).toHaveBeenCalled();
+    });
+
+    it('defaults to "both" when enumDisplay is not set', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      // Wait for the component to render after migration
+      await waitFor(() => {
+        expect(screen.getByText('More Options')).toBeInTheDocument();
+      });
+
+      // Click on More Options to expand
+      const moreOptionsButton = screen.getByText('More Options');
+      fireEvent.click(moreOptionsButton);
+
+      // Wait for the enum display to be visible
+      await waitFor(() => {
+        expect(screen.getByText('Enum Display')).toBeInTheDocument();
+      });
+
+      // The select should display 'Both' as the default value
+      expect(screen.getByText('Both')).toBeInTheDocument();
+    });
+
+    it('collapses More Options section when clicked again', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      // Wait for the component to render after migration
+      await waitFor(() => {
+        expect(screen.getByText('More Options')).toBeInTheDocument();
+      });
+
+      // Click on More Options to expand
+      const moreOptionsButton = screen.getByText('More Options');
+      fireEvent.click(moreOptionsButton);
+
+      // Enum display should be visible
+      await waitFor(() => {
+        expect(screen.getByText('Enum Display')).toBeInTheDocument();
+      });
+
+      // Click again to collapse
+      fireEvent.click(moreOptionsButton);
+
+      // Enum display should not be visible
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Enum Display')).not.toBeInTheDocument();
+      });
     });
   });
 });

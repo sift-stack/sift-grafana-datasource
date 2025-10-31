@@ -62,15 +62,19 @@ export interface ChannelDataQuery {
   calculatedChannelQueries?: CalculatedChannelDataQuery[];
 }
 
+export type EnumDisplayType = 'string' | 'value' | 'both';
+
 export interface SiftQuery extends DataQuery {
   channelDataQueries?: ChannelDataQuery[];
   combineRuns?: boolean;
+  enumDisplay?: EnumDisplayType;
   queryVersion: string;
 }
 
 export const DEFAULT_QUERY: Partial<SiftQuery> = {
   channelDataQueries: [],
   combineRuns: true,
+  enumDisplay: 'both',
   queryVersion: QUERY_VERSION,
 };
 

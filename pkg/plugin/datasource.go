@@ -39,6 +39,13 @@ const QueryVersion = "2.1"
 
 const maxParallelDataQueries = 10
 
+const (
+	EnumDisplayNone   = ""
+	EnumDisplayBoth   = "both"
+	EnumDisplayValue  = "value"
+	EnumDisplayString = "string"
+)
+
 var ValidSiftGrafanaDataTypes = []string{
 	"CHANNEL_DATA_TYPE_STRING",
 	"CHANNEL_DATA_TYPE_BOOL",
@@ -241,6 +248,7 @@ type queryModel struct {
 	commonQueryProperties
 	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
 	CombineRuns        bool               `json:"combineRuns"`
+	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
 }
 
@@ -397,7 +405,7 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 	}
 	afterExecutingQueries := time.Now()
 
-	frame, err := generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns)
+	frame, err := generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating data frame: %v", err.Error()))
 	}
@@ -550,7 +558,7 @@ func runDataQueries(pCtx backend.PluginContext, queries []siftApiGetDataSubQuery
 	return allData, nil
 }
 
-func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool) (*data.Frame, error) {
+func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, enumDisplay string) (*data.Frame, error) {
 	// create data frame response.
 	// For an overview on data frames and how grafana handles them:
 	// https://grafana.com/developers/plugin-tools/introduction/data-frames
@@ -781,6 +789,9 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		return allDataKeys[i].runId < allDataKeys[j].runId && allDataKeys[i].channelId < allDataKeys[j].channelId
 	})
 
+	// Track enum field base names for filtering later
+	enumFieldBaseNames := map[string]bool{}
+
 	for _, key := range allDataKeys {
 		m := md[key]
 		name := m.Channel.Name
@@ -848,6 +859,8 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 			field = data.NewField(name, labels, []*uint64{})
 
 		case "CHANNEL_DATA_TYPE_ENUM":
+			// Track the base name for this enum field
+			enumFieldBaseNames[name] = true
 			if key.isEnumString {
 				name = name + "_string"
 				field = data.NewField(name, labels, []*string{})
@@ -870,6 +883,46 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		}
 
 		frame.Fields = append(frame.Fields, field)
+	}
+
+	// Filter and rename enum fields based on enumDisplay setting
+	if enumDisplay == EnumDisplayString || enumDisplay == EnumDisplayValue {
+
+		filteredFields := []*data.Field{}
+		for _, field := range frame.Fields {
+			fieldName := field.Name
+			// Check if this is an enum field by looking for the suffix
+			isEnumField := false
+			baseName := ""
+			keepField := false
+
+			if strings.HasSuffix(fieldName, "_string") {
+				baseName = strings.TrimSuffix(fieldName, "_string")
+				if enumFieldBaseNames[baseName] {
+					isEnumField = true
+					keepField = enumDisplay == EnumDisplayString
+				}
+			} else if strings.HasSuffix(fieldName, "_value") {
+				baseName = strings.TrimSuffix(fieldName, "_value")
+				if enumFieldBaseNames[baseName] {
+					isEnumField = true
+					keepField = enumDisplay == EnumDisplayValue
+				}
+			}
+
+			if isEnumField {
+				if keepField {
+					// Rename the field to remove the suffix
+					field.Name = baseName
+					filteredFields = append(filteredFields, field)
+				}
+				// Skip fields we don't want to keep
+			} else {
+				// Keep non-enum fields as-is
+				filteredFields = append(filteredFields, field)
+			}
+		}
+		frame.Fields = filteredFields
 	}
 
 	// Sort fields by channel name first.

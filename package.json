@@ -84,6 +84,7 @@
     "@grafana/runtime": "^11.5.3",
     "@grafana/schema": "^11.5.3",
     "@grafana/ui": "^11.5.3",
+    "@playwright/test": "^1.52.0",
     "leven": "^4.0.0",
     "luxon": "^3.6.1",
     "nanoid": "^5.1.5",

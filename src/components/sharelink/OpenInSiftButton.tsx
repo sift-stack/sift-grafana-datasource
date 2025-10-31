@@ -113,6 +113,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
             aria-label="Open in Sift"
             tooltip={shareLink ? "Open this query in Sift. Right-click for more options" : disabledReason ?? 'Share link unavailable'}
             style={{ display: 'flex', alignItems: 'center', userSelect: 'none' }}
+            disabled={!shareLink}
           >
             <SquareShareIcon
               style={{ width: 11, height: 11, marginTop: -1, marginRight: 7 }}

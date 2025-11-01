@@ -1,6 +1,14 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { SiftDataSource } from './datasource';
-import { Asset, Run, Channel, AssetGrafanaVariable, SharelinkItems, SharelinkMetadataResponse, SiftQuery } from './types';
+import {
+  Asset,
+  Run,
+  Channel,
+  AssetGrafanaVariable,
+  SharelinkItems,
+  SharelinkMetadataResponse,
+  SiftQuery,
+} from './types';
 import { getTemplateSrv, getAppEvents, RefreshEvent } from '@grafana/runtime';
 import { TypedVariableModel, BusEventWithPayload } from '@grafana/data';
 import { CELUtil, replaceTemplateVariablesInQuery } from './utils';
@@ -352,7 +360,7 @@ export const useFetchSharelinkMetadata = (
 
     const fetchMetadata = async () => {
       const resourcePath = 'resolve-query-to-sift-metadata';
-      const newQuery = replaceTemplateVariablesInQuery(query, {});
+      const newQuery = datasource.applyTemplateVariables(query, {});
       try {
         const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, newQuery);
 

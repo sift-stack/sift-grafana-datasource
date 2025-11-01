@@ -5,15 +5,37 @@ import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
 import { SiftDataSource } from '../datasource';
 import { QueryEditor } from './query-editor/QueryEditor';
 import { QueryTypes } from '../types';
+import { OpenInSiftButton } from './sharelink/OpenInSiftButton';
 
 // Mock the QueryEditor component
 jest.mock('./query-editor/QueryEditor', () => ({
   QueryEditor: jest.fn(() => <div data-testid="mock-query-editor" />),
 }));
 
+// Mock the OpenInSiftButton component
+jest.mock('./sharelink/OpenInSiftButton', () => ({
+  OpenInSiftButton: jest.fn(() => <div data-testid="mock-sharelink-menu-item" />),
+}));
+
+// Mock the useFetchSharelinkMetadata hook
+jest.mock('../resources.hooks', () => ({
+  useFetchSharelinkMetadata: jest.fn(() => ({
+    shareLinkItems: {
+      channelIds: [],
+      assetIds: [],
+      runIds: [],
+      calculatedChannels: [],
+    },
+  })),
+}));
+
 // Create a mock for the datasource
 const createMockDatasource = () => ({
   migrateQuery: jest.fn(),
+  getApiRestUrl: jest.fn(() => 'https://sift.example.com'),
+  getFrontendUrl: jest.fn(() => undefined),
+  clearCache: jest.fn(),
+  postResource: jest.fn().mockResolvedValue(undefined),
 });
 
 describe('VisualSiftQueryEditor', () => {
@@ -52,6 +74,12 @@ describe('VisualSiftQueryEditor', () => {
       await waitFor(() => {
         expect(mockDatasource.migrateQuery).toHaveBeenCalledWith(initialQuery);
         expect(mockOnChange).toHaveBeenCalledWith(migratedQuery);
+      });
+
+      const openInSiftButtonProps = (OpenInSiftButton as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(openInSiftButtonProps).toMatchObject({
+        apiBaseUrl: 'https://sift.example.com',
+        frontendUrl: undefined,
       });
     });
 
@@ -398,6 +426,123 @@ describe('VisualSiftQueryEditor', () => {
 
       // Verify that onRunQuery was called
       expect(mockOnRunQuery).toHaveBeenCalled();
+    });
+  });
+
+  describe('Time Range Handling', () => {
+    it('computes shareLinkTimeRange from range prop with Date objects', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      const fromDate = new Date('2024-01-01T00:00:00Z');
+      const toDate = new Date('2024-01-02T00:00:00Z');
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+          range={{
+            from: fromDate as any,
+            to: toDate as any,
+            raw: { from: fromDate.toISOString(), to: toDate.toISOString() },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
+      });
+
+      // Verify OpenInSiftButton was called with the correct timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeRange: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString(),
+          },
+        }),
+        expect.anything()
+      );
+    });
+
+    it('handles range prop with string values', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      const fromIsoString = '2024-01-03T12:34:56.789Z';
+      const toIsoString = '2024-01-04T12:34:56.789Z';
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+          range={{
+            from: fromIsoString as any,
+            to: toIsoString as any,
+            raw: { from: fromIsoString, to: toIsoString },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
+      });
+
+      // Verify OpenInSiftButton was called with the stringified timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeRange: {
+            from: fromIsoString,
+            to: toIsoString,
+          },
+        }),
+        expect.anything()
+      );
+    });
+
+    it('passes undefined timeRange when range prop is not provided', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: '2',
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('loading-migration-placeholder')).not.toBeInTheDocument();
+      });
+
+      // Verify OpenInSiftButton was called with undefined timeRange
+      expect(OpenInSiftButton).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeRange: undefined,
+        }),
+        expect.anything()
+      );
     });
   });
 

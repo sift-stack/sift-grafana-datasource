@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 // Limit number of results that can be returned from the Sift API
@@ -165,5 +165,181 @@ func (d *SiftDatasource) callPurgeCache(ctx context.Context, req *backend.CallRe
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,
 		Body:   []byte("{}"),
+	})
+}
+
+type calculatedChannelMetadata struct {
+	Name               string   `json:"name"`
+	SourceChannels     []string `json:"sourceChannels"`
+	Expression         string   `json:"expression"`
+	ExpressionDataType string   `json:"expressionDataType"`
+}
+
+func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	log.DefaultLogger.Debug("resolveQueryToSiftMetadata request", "body", string(req.Body))
+
+	queryModel, err := convertQueryIfNeeded(json.RawMessage(req.Body))
+	if err != nil {
+		log.DefaultLogger.Error("resolveQueryToSiftMetadata convert error", "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusBadRequest,
+			Body:   []byte(fmt.Sprintf("parse query: %s", err)),
+		})
+	}
+
+	queries, calculatedKeys, err := generateQueries(req.PluginContext, *queryModel, d)
+	if err != nil {
+		log.DefaultLogger.Error("resolveQueryToSiftMetadata generateQueries error", "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusBadRequest,
+			Body:   []byte(fmt.Sprintf("generate queries: %s", err)),
+		})
+	}
+
+	assetIDSet := make(map[string]struct{})
+	runIDSet := make(map[string]struct{})
+	channelIDSet := make(map[string]struct{})
+	order := make([]string, 0, len(calculatedKeys))
+	metaByName := make(map[string]*calculatedChannelMetadata)
+
+	for _, subQuery := range queries {
+		calc := subQuery.CalculatedChannel
+		if subQuery.Channel != nil {
+			channelID := strings.TrimSpace(subQuery.Channel.ChannelId)
+			if channelID != "" {
+				channelIDSet[channelID] = struct{}{}
+			}
+			if subQuery.Channel.RunId != nil {
+				if runID := strings.TrimSpace(*subQuery.Channel.RunId); runID != "" {
+					runIDSet[runID] = struct{}{}
+				}
+			}
+		}
+
+		if calc == nil {
+			continue
+		}
+
+		if calc.RunId != nil {
+			if runID := strings.TrimSpace(*calc.RunId); runID != "" {
+				runIDSet[runID] = struct{}{}
+			}
+		}
+
+		name := strings.TrimSpace(calc.ChannelKey)
+		if key, ok := calculatedKeys[calc.ChannelKey]; ok {
+			if trimmed := strings.TrimSpace(key.channelName); trimmed != "" {
+				name = trimmed
+			}
+		}
+		if name == "" {
+			continue
+		}
+
+		refs := calc.ExpressionRequest.ExpressionChannelReferences
+		expr := strings.TrimSpace(calc.ExpressionRequest.Expression)
+
+		meta, exists := metaByName[name]
+		if !exists {
+			meta = &calculatedChannelMetadata{
+				Name:               name,
+				SourceChannels:     make([]string, len(refs)),
+				ExpressionDataType: "double",
+			}
+			metaByName[name] = meta
+			order = append(order, name)
+		} else if len(meta.SourceChannels) != len(refs) {
+			meta.SourceChannels = make([]string, len(refs))
+		}
+
+		meta.Expression = expr
+
+		for idx, ref := range refs {
+			channelID := strings.TrimSpace(ref.ChannelId)
+			if channelID == "" {
+				continue
+			}
+			channelIDSet[channelID] = struct{}{}
+			if meta.SourceChannels[idx] == "" {
+				meta.SourceChannels[idx] = channelID
+			}
+		}
+	}
+
+	channelIDs := make([]string, 0, len(channelIDSet))
+	for channelID := range channelIDSet {
+		channelIDs = append(channelIDs, channelID)
+	}
+
+	if len(channelIDs) > 0 {
+		channels, err := d.getChannelsById(req.PluginContext, channelIDs)
+		if err != nil {
+			log.DefaultLogger.Error("resolveQueryToSiftMetadata channel lookup error", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   []byte(fmt.Sprintf("lookup channels: %s", err)),
+			})
+		}
+		for _, channel := range channels {
+			assetID := strings.TrimSpace(channel.AssetId)
+			if assetID != "" {
+				assetIDSet[assetID] = struct{}{}
+			}
+		}
+	}
+
+	assetIDs := sortedKeys(assetIDSet)
+	runIDs := sortedKeys(runIDSet)
+	channelIDsSorted := sortedKeys(channelIDSet)
+
+	log.DefaultLogger.Debug(
+		"resolveQueryToSiftMetadata summary",
+		"assetIds", assetIDs,
+		"runIds", runIDs,
+		"channelIds", channelIDsSorted,
+	)
+
+	var calculatedChannels []calculatedChannelMetadata
+	for _, name := range order {
+		meta := metaByName[name]
+		if meta.Expression == "" {
+			continue
+		}
+
+		complete := true
+		for _, channelID := range meta.SourceChannels {
+			if channelID == "" {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			calculatedChannels = append(calculatedChannels, *meta)
+		}
+	}
+
+	responsePayload := struct {
+		AssetIDs           []string                    `json:"assetIds"`
+		RunIDs             []string                    `json:"runIds"`
+		ChannelIDs         []string                    `json:"channelIds"`
+		CalculatedChannels []calculatedChannelMetadata `json:"calculatedChannels,omitempty"`
+	}{
+		AssetIDs:           assetIDs,
+		RunIDs:             runIDs,
+		ChannelIDs:         channelIDsSorted,
+		CalculatedChannels: calculatedChannels,
+	}
+
+	body, err := json.Marshal(responsePayload)
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusInternalServerError,
+			Body:   []byte(fmt.Sprintf("encode response: %s", err)),
+		})
+	}
+
+	return sender.Send(&backend.CallResourceResponse{
+		Status: http.StatusOK,
+		Body:   body,
 	})
 }

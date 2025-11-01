@@ -1,9 +1,17 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { SiftDataSource } from './datasource';
-import { Asset, Run, Channel, AssetGrafanaVariable } from './types';
+import {
+  Asset,
+  Run,
+  Channel,
+  AssetGrafanaVariable,
+  SharelinkItems,
+  SharelinkMetadataResponse,
+  SiftQuery,
+} from './types';
 import { getTemplateSrv, getAppEvents, RefreshEvent } from '@grafana/runtime';
 import { TypedVariableModel, BusEventWithPayload } from '@grafana/data';
-import { CELUtil } from './utils';
+import { CELUtil, replaceTemplateVariablesInQuery } from './utils';
 import { debounce } from 'lodash';
 import leven from 'leven';
 
@@ -335,3 +343,48 @@ export function useSiftAssetVariables(): AssetGrafanaVariable[] {
   }, []);
   return vars;
 }
+
+export const useFetchSharelinkMetadata = (
+  datasource: SiftDataSource,
+  query: SiftQuery,
+  enabled: boolean
+): {
+  shareLinkItems: SharelinkItems | undefined;
+} => {
+  const [shareLinkItems, setShareLinkItems] = useState<SharelinkItems | undefined>();
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const fetchMetadata = async () => {
+      const resourcePath = 'resolve-query-to-sift-metadata';
+      const newQuery = datasource.applyTemplateVariables(query, {});
+      try {
+        const response = await datasource.postResource<SharelinkMetadataResponse>(resourcePath, newQuery);
+
+        const hasChannelIds = Array.isArray(response?.channelIds) && response.channelIds.length > 0;
+        const hasCalculatedChannels =
+          Array.isArray(response?.calculatedChannels) && response.calculatedChannels.length > 0;
+
+        if (response && (hasChannelIds || hasCalculatedChannels)) {
+          setShareLinkItems({
+            ...response,
+            channelIds: response.channelIds ?? [],
+            calculatedChannels: response.calculatedChannels ?? [],
+          });
+        } else {
+          setShareLinkItems(undefined);
+        }
+      } catch (error) {
+        console.error('resolveQueryToSiftMetadata failed', error);
+        setShareLinkItems(undefined);
+      }
+    };
+
+    void fetchMetadata();
+  }, [enabled, datasource, query]);
+
+  return { shareLinkItems };
+};

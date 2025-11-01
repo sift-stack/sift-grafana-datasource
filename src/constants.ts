@@ -1,10 +1,4 @@
-import {
-  AssetQuery,
-  CalculatedChannelDataQuery,
-  ChannelDataQuery,
-  ChannelQuery,
-  RunQuery
-} from './types';
+import { AssetQuery, CalculatedChannelDataQuery, ChannelDataQuery, ChannelQuery, RunQuery } from './types';
 
 export const DEFAULT_ASSET_QUERY: AssetQuery = { asSelect: true };
 export const DEFAULT_RUN_QUERY: RunQuery = { asSelect: true };

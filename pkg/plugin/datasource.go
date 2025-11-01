@@ -154,6 +154,9 @@ func (d *SiftDatasource) CallResource(ctx context.Context, req *backend.CallReso
 	case "purge-cache":
 		return d.callPurgeCache(ctx, req, sender)
 
+	case "resolve-query-to-sift-metadata":
+		return d.resolveQueryToSiftMetadata(ctx, req, sender)
+
 	default:
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
@@ -192,7 +195,8 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 }
 
 type jsonData struct {
-	Url string `json:"url"`
+	Url         string `json:"url"`
+	FrontendUrl string `json:"frontendUrl"`
 }
 
 type commonQueryProperties struct {
@@ -500,6 +504,18 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 	}
 
 	return queries, calculatedChannelKeys, nil
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	if len(set) == 0 {
+		return []string{}
+	}
+	result := make([]string, 0, len(set))
+	for k := range set {
+		result = append(result, k)
+	}
+	slices.Sort(result)
+	return result
 }
 
 func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGetDataSubQuery {

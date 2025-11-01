@@ -30,6 +30,8 @@ tmp/
 **/cypress/videos
 **/cypress/report.json
 
+test-results/
+
 # Editor
 .idea
 .vscode/*

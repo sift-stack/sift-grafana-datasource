@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { QueryEditorProps } from '@grafana/data';
 import {
@@ -12,15 +12,24 @@ import {
   Select,
 } from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
-import { ChannelDataQuery, EnumDisplayType, QueryType, QueryTypes, SiftDataSourceOptions, SiftQuery } from '../types';
+import {
+  ChannelDataQuery,
+  QueryType,
+  QueryTypes,
+  SiftDataSourceOptions,
+  SiftQuery,
+  EnumDisplayType
+} from '../types';
 import { ensureQueryDefaults } from '../utils';
 import { Section } from './common/Section';
 import { QueryEditor } from './query-editor/QueryEditor';
+import { OpenInSiftButton } from './sharelink/OpenInSiftButton';
+import { useFetchSharelinkMetadata } from '../resources.hooks';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
 
 export const VisualSiftQueryEditor = (props: Props) => {
-  const { query, onChange, onRunQuery, datasource, data } = props;
+  const { query, onChange, onRunQuery, datasource, data, range } = props;
   const panelId = typeof data?.request?.panelId === 'number' ? data.request.panelId : -1;
 
   const [loading, setLoading] = useState(true);
@@ -30,9 +39,20 @@ export const VisualSiftQueryEditor = (props: Props) => {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const queryRef = useRef(query);
+  const shareLinkTimeRange = useMemo(() => {
+    if (!range) {
+      return undefined;
+    }
+    return {
+      from: range.from?.toISOString?.() ?? String(range.from ?? ''),
+      to: range.to?.toISOString?.() ?? String(range.to ?? ''),
+    };
+  }, [range]);
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
+
+  const { shareLinkItems } = useFetchSharelinkMetadata(datasource, query, !loading);
 
   // After initial render, we will perform migrations. This ensures the component renders in Mixed Mode
   useEffect(() => {
@@ -95,6 +115,11 @@ export const VisualSiftQueryEditor = (props: Props) => {
     [onUpdateQuery]
   );
 
+  const apiRestUrl = datasource.getApiRestUrl();
+  const frontendUrl = typeof datasource.getFrontendUrl === 'function'
+    ? datasource.getFrontendUrl()
+    : undefined;
+
   if (loading) {
     return <div data-testid="loading-migration-placeholder">Migrating query versions...</div>;
   }
@@ -134,6 +159,13 @@ export const VisualSiftQueryEditor = (props: Props) => {
             <span>More Options</span>
           </div>
         </InlineLabel>
+        <OpenInSiftButton
+          items={shareLinkItems}
+          apiBaseUrl={apiRestUrl}
+          frontendUrl={frontendUrl}
+          timeRange={shareLinkTimeRange}
+        />
+
       </InlineFieldRow>
       {showMoreOptions && (
         <Section label="Options">

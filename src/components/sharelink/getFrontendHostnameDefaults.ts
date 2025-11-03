@@ -7,7 +7,15 @@ export function getFrontendHostnameDefaults(apiBaseUrl: string): string | null {
     return null;
   }
 
-  const cleanUrl = apiBaseUrl.replace(/^https?:\/\//, '').trim();
+  // Use URL constructor to properly parse the URL and extract the host
+  let cleanUrl: string;
+  try {
+    const url = new URL(apiBaseUrl);
+    cleanUrl = url.host; // host includes port if present
+  } catch {
+    // If not a valid URL, assume it's already a hostname and use as-is
+    cleanUrl = apiBaseUrl.trim();
+  }
 
   switch (cleanUrl) {
     case 'api.siftstack.com':

@@ -64,7 +64,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -96,7 +96,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -148,7 +148,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 

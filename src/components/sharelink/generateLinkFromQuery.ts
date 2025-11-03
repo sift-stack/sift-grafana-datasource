@@ -115,11 +115,8 @@ function normaliseBasePath(basePath: string): string {
   if (!basePath.startsWith('/')) {
     return `/${basePath}`;
   }
-  return basePath;
-}
-
-function stripTrailingSlash(input: string): string {
-  return input.endsWith('/') ? input.slice(0, -1) : input;
+  // Remove trailing slash for consistency
+  return basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
 }
 
 function setIfPresent(hash: URLSearchParams, key: string, value: string | undefined | null) {
@@ -181,20 +178,30 @@ function createExplorerLink(params: ExplorerLinkParams): string {
 
   const hashString = hashParams.toString();
 
-  let url = basePath;
-  if (hashString) {
-    url += `#${hashString}`;
-  }
-
+  // If origin is provided, use URL constructor for proper URL building
   if (params.origin) {
-    url = `${stripTrailingSlash(params.origin)}${url}`;
+    const url = new URL(basePath, params.origin);
+    if (hashString) {
+      url.hash = hashString;
+    }
+    return url.toString();
   }
 
-  return url;
+  // Return relative URL
+  return hashString ? `${basePath}#${hashString}` : basePath;
 }
 
 export function generateLinkFromQuery(hostname: string, items: SharelinkItems, timeRange?: SharelinkTimeRange) {
-  const origin = hostname.startsWith('http://') || hostname.startsWith('https://') ? hostname : `https://${hostname}`;
+  // Normalize hostname to a valid origin URL
+  let origin: string;
+  try {
+    // If hostname is already a valid URL, use it directly
+    const testUrl = new URL(hostname);
+    origin = testUrl.origin;
+  } catch {
+    // If not a valid URL, assume it's a hostname and prepend https://
+    origin = `https://${hostname}`;
+  }
   const channelIds = items.channelIds;
   const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);
   const legendChannels: LegendConfigPayload['channels'] = {};

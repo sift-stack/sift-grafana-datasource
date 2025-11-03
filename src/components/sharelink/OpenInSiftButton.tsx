@@ -16,7 +16,7 @@ interface SharelinkMenuItemProps {
 }
 
 function openLink(link: string) {
-  window.open(link, '_blank');
+  window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 async function copyToClipboard(value: string) {

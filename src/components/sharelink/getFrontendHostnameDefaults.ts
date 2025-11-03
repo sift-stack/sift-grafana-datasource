@@ -11,7 +11,13 @@ export function getFrontendHostnameDefaults(apiBaseUrl: string): string | null {
   let cleanUrl: string;
   try {
     const url = new URL(apiBaseUrl);
-    cleanUrl = url.host; // host includes port if present
+    // Check if we got a valid absolute URL (origin should not be null)
+    if (url.origin && url.origin !== 'null' && url.host) {
+      cleanUrl = url.host; // host includes port if present
+    } else {
+      // URL parsed as relative, treat as hostname
+      throw new Error('Relative URL');
+    }
   } catch {
     // If not a valid URL, assume it's already a hostname and use as-is
     cleanUrl = apiBaseUrl.trim();

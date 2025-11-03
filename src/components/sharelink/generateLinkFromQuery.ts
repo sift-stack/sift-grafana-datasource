@@ -180,11 +180,18 @@ function createExplorerLink(params: ExplorerLinkParams): string {
 
   // If origin is provided, use URL constructor for proper URL building
   if (params.origin) {
-    const url = new URL(basePath, params.origin);
-    if (hashString) {
-      url.hash = hashString;
+    try {
+      const url = new URL(basePath, params.origin);
+      if (hashString) {
+        url.hash = hashString;
+      }
+      return url.toString();
+    } catch {
+      // If URL construction fails, fall back to string concatenation
+      // This shouldn't happen if origin is properly validated
+      const fullUrl = `${params.origin}${basePath}`;
+      return hashString ? `${fullUrl}#${hashString}` : fullUrl;
     }
-    return url.toString();
   }
 
   // Return relative URL
@@ -192,15 +199,33 @@ function createExplorerLink(params: ExplorerLinkParams): string {
 }
 
 export function generateLinkFromQuery(hostname: string, items: SharelinkItems, timeRange?: SharelinkTimeRange) {
+  // Guard against null/undefined hostname
+  if (!hostname) {
+    throw new Error('hostname is required');
+  }
+  
   // Normalize hostname to a valid origin URL
   let origin: string;
   try {
     // If hostname is already a valid URL, use it directly
     const testUrl = new URL(hostname);
-    origin = testUrl.origin;
+    // Check if origin is valid (not null or 'null')
+    if (testUrl.origin && testUrl.origin !== 'null') {
+      origin = testUrl.origin;
+    } else {
+      // URL parsed but origin is invalid, treat as hostname
+      throw new Error('Invalid origin');
+    }
   } catch {
     // If not a valid URL, assume it's a hostname and prepend https://
-    origin = `https://${hostname}`;
+    const withProtocol = `https://${hostname}`;
+    try {
+      const validatedUrl = new URL(withProtocol);
+      origin = validatedUrl.origin;
+    } catch {
+      // If still invalid, fall back to the string (shouldn't happen with valid hostnames)
+      origin = withProtocol;
+    }
   }
   const channelIds = items.channelIds;
   const channelKeys = channelIds.map((_, index) => `channel-key-${index + 1}`);

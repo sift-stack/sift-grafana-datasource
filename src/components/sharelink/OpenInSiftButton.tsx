@@ -16,7 +16,7 @@ interface SharelinkMenuItemProps {
 }
 
 function openLink(link: string) {
-  window.open(link, '_blank');
+  window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 async function copyToClipboard(value: string) {
@@ -63,10 +63,19 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
         disabledReason: 'Configure the Sift API REST URL to enable share links',
       };
     }
-    return {
-      shareLink: generateLinkFromQuery(hostname, items, timeRange),
-      disabledReason: undefined,
-    };
+    
+    try {
+      return {
+        shareLink: generateLinkFromQuery(hostname, items, timeRange),
+        disabledReason: undefined,
+      };
+    } catch (error) {
+      console.error('Failed to generate share link:', error);
+      return {
+        shareLink: null,
+        disabledReason: 'Failed to generate share link',
+      };
+    }
   }, [apiBaseUrl, frontendUrl, items, timeRange]);
 
   return (

@@ -64,7 +64,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -96,7 +96,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -148,7 +148,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -204,6 +204,58 @@ describe('OpenInSiftButton', () => {
     expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
 
     const menuButton = screen.getByRole('button', { name: 'Open in Sift' });
+    fireEvent.contextMenu(menuButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /Open Link/i })).toBeDisabled();
+    });
+  });
+
+  it('handles errors from generateLinkFromQuery gracefully', async () => {
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    generateLinkFromQueryMock.mockImplementation(() => {
+      throw new Error('Test error');
+    });
+
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://api.sift.dev" />);
+
+    expect(generateLinkFromQueryMock).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith('Failed to generate share link:', expect.any(Error));
+
+    const menuButton = screen.getByRole('button', { name: 'Open in Sift' });
+    expect(menuButton).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.contextMenu(menuButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /Open Link/i })).toBeDisabled();
+    });
+  });
+
+  it('handles null hostname from getFrontendHostnameDefaults', async () => {
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [],
+    };
+
+    getFrontendHostnameDefaultsMock.mockReturnValue(null);
+
+    render(<OpenInSiftButton items={items} apiBaseUrl="https://unknown-api.example.com" />);
+
+    expect(getFrontendHostnameDefaultsMock).toHaveBeenCalledWith('https://unknown-api.example.com');
+    expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
+
+    const menuButton = screen.getByRole('button', { name: 'Open in Sift' });
+    expect(menuButton).toHaveAttribute('aria-disabled', 'true');
+
     fireEvent.contextMenu(menuButton);
 
     await waitFor(() => {

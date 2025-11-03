@@ -11,7 +11,7 @@ import {
 } from './types';
 import { getTemplateSrv, getAppEvents, RefreshEvent } from '@grafana/runtime';
 import { TypedVariableModel, BusEventWithPayload } from '@grafana/data';
-import { CELUtil, replaceTemplateVariablesInQuery } from './utils';
+import { CELUtil } from './utils';
 import { debounce } from 'lodash';
 import leven from 'leven';
 

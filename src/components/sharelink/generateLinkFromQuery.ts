@@ -241,7 +241,8 @@ export function generateLinkFromQuery(hostname: string, items: SharelinkItems, t
   if (items.calculatedChannels) {
     items.calculatedChannels.forEach((calcChannel, index) => {
       const channelKeyIndex = channelKeys.length + index;
-      const channelKeyName = `channel-key=${channelKeyIndex}`;
+      const channelKeyName = `channel-key-${channelKeyIndex+1}`;
+      channelKeys.push(channelKeyName)
 
       const channelReferences: Record<string, string> = {};
       calcChannel.sourceChannels.forEach((el, index) => {

@@ -945,9 +945,109 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 	frame.Meta = &data.FrameMeta{
 		Type:        data.FrameTypeTimeSeriesWide,
 		TypeVersion: data.FrameTypeVersion{0, 1},
+		Notices:     []data.Notice{},
 	}
 
+	// Check for precision loss in INT64/UINT64 fields
+	checkInt64PrecisionLoss(frame)
+
 	return frame, nil
+}
+
+// checkInt64PrecisionLoss validates INT64/UINT64 fields for values outside JavaScript's safe integer range
+// and attaches warnings to the frame if precision loss may occur in the frontend.
+func checkInt64PrecisionLoss(frame *data.Frame) {
+	// JavaScript's safe integer range: ±2^53-1
+	const jsSafeIntMax int64 = 9007199254740991  // 2^53 - 1
+	const jsSafeIntMin int64 = -9007199254740991 // -(2^53 - 1)
+	const jsSafeUintMax uint64 = 9007199254740991
+	const warningFormat = "Field '%s' (asset: %s) contains %s values outside JavaScript's safe integer range (min: %d, max: %d). Values may not be displayed correctly."
+
+	for _, field := range frame.Fields {
+		var warning string
+
+		switch field.Type() {
+		case data.FieldTypeInt64, data.FieldTypeNullableInt64:
+			var minVal, maxVal int64
+			hasUnsafe := false
+
+			for i := 0; i < field.Len(); i++ {
+				var val int64
+				if v, ok := field.At(i).(*int64); ok && v != nil {
+					val = *v
+				} else if v, ok := field.At(i).(int64); ok {
+					val = v
+				} else {
+					continue
+				}
+
+				if i == 0 || val < minVal {
+					minVal = val
+				}
+				if i == 0 || val > maxVal {
+					maxVal = val
+				}
+				if val > jsSafeIntMax || val < jsSafeIntMin {
+					hasUnsafe = true
+				}
+			}
+
+			if hasUnsafe {
+				assetName := field.Labels["asset"]
+				if assetName == "" {
+					assetName = "unknown"
+				}
+				warning = fmt.Sprintf(warningFormat, field.Name, assetName, "INT64", minVal, maxVal)
+			}
+
+		case data.FieldTypeUint64, data.FieldTypeNullableUint64:
+			var minVal, maxVal uint64
+			hasUnsafe := false
+
+			for i := 0; i < field.Len(); i++ {
+				var val uint64
+				if v, ok := field.At(i).(*uint64); ok && v != nil {
+					val = *v
+				} else if v, ok := field.At(i).(uint64); ok {
+					val = v
+				} else {
+					continue
+				}
+
+				if i == 0 || val < minVal {
+					minVal = val
+				}
+				if i == 0 || val > maxVal {
+					maxVal = val
+				}
+				if val > jsSafeUintMax {
+					hasUnsafe = true
+				}
+			}
+
+			if hasUnsafe {
+				assetName := field.Labels["asset"]
+				if assetName == "" {
+					assetName = "unknown"
+				}
+				warning = fmt.Sprintf(warningFormat, field.Name, assetName, "UINT64", minVal, maxVal)
+			}
+
+		default:
+			// no checking needed
+		}
+
+		if warning != "" {
+			if frame.Meta == nil {
+				frame.Meta = &data.FrameMeta{}
+			}
+			frame.Meta.Notices = append(frame.Meta.Notices, data.Notice{
+				Severity: data.NoticeSeverityWarning,
+				Text:     warning,
+			})
+			log.DefaultLogger.Warn(warning)
+		}
+	}
 }
 
 func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds []string, assetIds []string, d *SiftDatasource) ([]siftApiGetDataSubQuery, error) {

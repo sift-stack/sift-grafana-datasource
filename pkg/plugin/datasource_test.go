@@ -15,6 +15,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/useragent"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -2162,4 +2163,183 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayMixedChannels(
 
 	// Verify temperature value
 	s.Equal(23.5, *frame.Fields[2].At(0).(*float64))
+}
+
+func TestCheckInt64PrecisionLoss(t *testing.T) {
+	tests := []struct {
+		name           string
+		fieldType      string
+		values         interface{}
+		labels         map[string]string
+		expectWarning  bool
+		expectedNotice string
+	}{
+		{
+			name:          "INT64 values within safe range",
+			fieldType:     "int64",
+			values:        []*int64{int64Ptr(100), int64Ptr(200), int64Ptr(-100)},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:           "INT64 values exceeding max safe range",
+			fieldType:      "int64",
+			values:         []*int64{int64Ptr(9007199254740992), int64Ptr(100)}, // 2^53
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains INT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:           "INT64 values below min safe range",
+			fieldType:      "int64",
+			values:         []*int64{int64Ptr(-9007199254740992), int64Ptr(100)}, // -(2^53)
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains INT64 values outside JavaScript's safe integer range (min: -9007199254740992, max: 100). Values may not be displayed correctly.",
+		},
+		{
+			name:           "INT64 values with both extremes",
+			fieldType:      "int64",
+			values:         []*int64{int64Ptr(-9007199254740992), int64Ptr(9007199254740992)},
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains INT64 values outside JavaScript's safe integer range (min: -9007199254740992, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:          "UINT64 values within safe range",
+			fieldType:     "uint64",
+			values:        []*uint64{uint64Ptr(100), uint64Ptr(200), uint64Ptr(0)},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:           "UINT64 values exceeding safe range",
+			fieldType:      "uint64",
+			values:         []*uint64{uint64Ptr(9007199254740992), uint64Ptr(100)}, // 2^53
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains UINT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:           "INT64 without asset label",
+			fieldType:      "int64",
+			values:         []*int64{int64Ptr(9007199254740992)},
+			labels:         map[string]string{},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: unknown) contains INT64 values outside JavaScript's safe integer range (min: 9007199254740992, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:          "INT64 at exact safe boundary (max)",
+			fieldType:     "int64",
+			values:        []*int64{int64Ptr(9007199254740991)}, // 2^53 - 1 (safe)
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "INT64 at exact safe boundary (min)",
+			fieldType:     "int64",
+			values:        []*int64{int64Ptr(-9007199254740991)}, // -(2^53 - 1) (safe)
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "UINT64 at exact safe boundary",
+			fieldType:     "uint64",
+			values:        []*uint64{uint64Ptr(9007199254740991)}, // 2^53 - 1 (safe)
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "INT64 with nil values",
+			fieldType:     "int64",
+			values:        []*int64{nil, int64Ptr(100), nil},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "UINT64 with nil values",
+			fieldType:     "uint64",
+			values:        []*uint64{nil, uint64Ptr(100), nil},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:           "Non-nullable INT64 values exceeding safe range",
+			fieldType:      "int64_non_nullable",
+			values:         []int64{9007199254740992, 100},
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains INT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:           "Non-nullable UINT64 values exceeding safe range",
+			fieldType:      "uint64_non_nullable",
+			values:         []uint64{9007199254740992, 100},
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains UINT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:          "Non-nullable INT64 values within safe range",
+			fieldType:     "int64_non_nullable",
+			values:        []int64{100, 200, -100},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "Non-nullable UINT64 values within safe range",
+			fieldType:     "uint64_non_nullable",
+			values:        []uint64{100, 200, 0},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frame := createTestFrame(tt.fieldType, tt.values, tt.labels)
+			
+			checkInt64PrecisionLoss(frame)
+
+			if tt.expectWarning {
+				require.NotNil(t, frame.Meta, "Expected frame.Meta to be set")
+				require.Len(t, frame.Meta.Notices, 1, "Expected exactly one notice")
+				require.Equal(t, tt.expectedNotice, frame.Meta.Notices[0].Text)
+			} else {
+				if frame.Meta != nil {
+					require.Len(t, frame.Meta.Notices, 0, "Expected no notices")
+				}
+			}
+		})
+	}
+}
+
+// Helper functions for tests
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+func uint64Ptr(v uint64) *uint64 {
+	return &v
+}
+
+func createTestFrame(fieldType string, values interface{}, labels map[string]string) *data.Frame {
+	frame := data.NewFrame("test_frame")
+	
+	var field *data.Field
+	switch fieldType {
+	case "int64":
+		field = data.NewField("test_field", labels, values.([]*int64))
+	case "uint64":
+		field = data.NewField("test_field", labels, values.([]*uint64))
+	case "int64_non_nullable":
+		field = data.NewField("test_field", labels, values.([]int64))
+	case "uint64_non_nullable":
+		field = data.NewField("test_field", labels, values.([]uint64))
+	default:
+		panic("unsupported field type")
+	}
+	
+	frame.Fields = append(frame.Fields, field)
+	return frame
 }

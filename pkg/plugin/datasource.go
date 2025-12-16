@@ -967,21 +967,28 @@ func checkInt64PrecisionLoss(frame *data.Frame) {
 		var warning string
 
 		switch field.Type() {
-		case data.FieldTypeNullableInt64:
+		case data.FieldTypeInt64, data.FieldTypeNullableInt64:
 			var minVal, maxVal int64
 			hasUnsafe := false
 
 			for i := 0; i < field.Len(); i++ {
+				var val int64
 				if v, ok := field.At(i).(*int64); ok && v != nil {
-					if i == 0 || *v < minVal {
-						minVal = *v
-					}
-					if i == 0 || *v > maxVal {
-						maxVal = *v
-					}
-					if *v > jsSafeIntMax || *v < jsSafeIntMin {
-						hasUnsafe = true
-					}
+					val = *v
+				} else if v, ok := field.At(i).(int64); ok {
+					val = v
+				} else {
+					continue
+				}
+
+				if i == 0 || val < minVal {
+					minVal = val
+				}
+				if i == 0 || val > maxVal {
+					maxVal = val
+				}
+				if val > jsSafeIntMax || val < jsSafeIntMin {
+					hasUnsafe = true
 				}
 			}
 
@@ -993,21 +1000,28 @@ func checkInt64PrecisionLoss(frame *data.Frame) {
 				warning = fmt.Sprintf(warningFormat, field.Name, assetName, "INT64", minVal, maxVal)
 			}
 
-		case data.FieldTypeNullableUint64:
+		case data.FieldTypeUint64, data.FieldTypeNullableUint64:
 			var minVal, maxVal uint64
 			hasUnsafe := false
 
 			for i := 0; i < field.Len(); i++ {
+				var val uint64
 				if v, ok := field.At(i).(*uint64); ok && v != nil {
-					if i == 0 || *v < minVal {
-						minVal = *v
-					}
-					if i == 0 || *v > maxVal {
-						maxVal = *v
-					}
-					if *v > jsSafeUintMax {
-						hasUnsafe = true
-					}
+					val = *v
+				} else if v, ok := field.At(i).(uint64); ok {
+					val = v
+				} else {
+					continue
+				}
+
+				if i == 0 || val < minVal {
+					minVal = val
+				}
+				if i == 0 || val > maxVal {
+					maxVal = val
+				}
+				if val > jsSafeUintMax {
+					hasUnsafe = true
 				}
 			}
 

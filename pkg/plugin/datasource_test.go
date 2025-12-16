@@ -2263,6 +2263,36 @@ func TestCheckInt64PrecisionLoss(t *testing.T) {
 			labels:        map[string]string{"asset": "TestAsset"},
 			expectWarning: false,
 		},
+		{
+			name:           "Non-nullable INT64 values exceeding safe range",
+			fieldType:      "int64_non_nullable",
+			values:         []int64{9007199254740992, 100},
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains INT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:           "Non-nullable UINT64 values exceeding safe range",
+			fieldType:      "uint64_non_nullable",
+			values:         []uint64{9007199254740992, 100},
+			labels:         map[string]string{"asset": "TestAsset"},
+			expectWarning:  true,
+			expectedNotice: "Field 'test_field' (asset: TestAsset) contains UINT64 values outside JavaScript's safe integer range (min: 100, max: 9007199254740992). Values may not be displayed correctly.",
+		},
+		{
+			name:          "Non-nullable INT64 values within safe range",
+			fieldType:     "int64_non_nullable",
+			values:        []int64{100, 200, -100},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
+		{
+			name:          "Non-nullable UINT64 values within safe range",
+			fieldType:     "uint64_non_nullable",
+			values:        []uint64{100, 200, 0},
+			labels:        map[string]string{"asset": "TestAsset"},
+			expectWarning: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -2302,6 +2332,10 @@ func createTestFrame(fieldType string, values interface{}, labels map[string]str
 		field = data.NewField("test_field", labels, values.([]*int64))
 	case "uint64":
 		field = data.NewField("test_field", labels, values.([]*uint64))
+	case "int64_non_nullable":
+		field = data.NewField("test_field", labels, values.([]int64))
+	case "uint64_non_nullable":
+		field = data.NewField("test_field", labels, values.([]uint64))
 	default:
 		panic("unsupported field type")
 	}

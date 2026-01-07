@@ -26,11 +26,12 @@ func (d *SiftDatasource) callResourceAssets(ctx context.Context, req *backend.Ca
 		return err
 	}
 
-	params := v // copy query params then overwrite any defaults
+	params := v
+	limit := ResourceLimit
 	if params.Get("limit") != "" {
-		params.Set("paginationSearchParams.limit", params.Get("limit"))
-	} else {
-		params.Set("paginationSearchParams.limit", strconv.Itoa(ResourceLimit))
+		if parsedLimit, err := strconv.Atoi(params.Get("limit")); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
 	}
 
 	assets, err := handlePaginatedRequest[Asset](d, apiRequest{
@@ -38,7 +39,7 @@ func (d *SiftDatasource) callResourceAssets(ctx context.Context, req *backend.Ca
 		method:      "GET",
 		path:        "/api/v1/assets",
 		queryParams: params,
-	}, ResourceLimit, 1, func(respBody []byte) ([]Asset, string, error) {
+	}, limit, 1, func(respBody []byte) ([]Asset, string, error) {
 		response := listAssetsQueryResponse{}
 		err := json.Unmarshal(respBody, &response)
 		if err != nil {

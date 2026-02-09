@@ -4,6 +4,7 @@
   "name": "Sift",
   "id": "sift-grafana-datasource",
   "metrics": true,
+  "annotations": true,
   "backend": true,
   "executable": "gpx_grafana_datasource",
   "info": {

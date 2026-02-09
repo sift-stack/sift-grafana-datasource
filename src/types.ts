@@ -64,11 +64,14 @@ export interface ChannelDataQuery {
 
 export type EnumDisplayType = 'string' | 'value' | 'both';
 
+export type AnnotationQueryType = 'dataQuery' | 'annotationsQuery';
+
 export interface SiftQuery extends DataQuery {
   channelDataQueries?: ChannelDataQuery[];
   combineRuns?: boolean;
   enumDisplay?: EnumDisplayType;
   queryVersion: string;
+  annotationType?: AnnotationQueryType;
 }
 
 export const DEFAULT_QUERY: Partial<SiftQuery> = {

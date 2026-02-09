@@ -40,10 +40,11 @@ const QueryVersion = "2.1"
 const maxParallelDataQueries = 10
 
 const (
-	EnumDisplayNone   = ""
-	EnumDisplayBoth   = "both"
-	EnumDisplayValue  = "value"
-	EnumDisplayString = "string"
+	EnumDisplayNone     = ""
+	EnumDisplayBoth     = "both"
+	EnumDisplayValue    = "value"
+	EnumDisplayString   = "string"
+	EnumDisplayCombined = "combined"
 )
 
 var ValidSiftGrafanaDataTypes = []string{
@@ -250,6 +251,7 @@ type queryModel struct {
 	CombineRuns        bool               `json:"combineRuns"`
 	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
+	AnnotationType     string             `json:"annotationType"`
 }
 
 type queryResponse struct {
@@ -352,6 +354,7 @@ type frameKey struct {
 	runId               string
 	bitFieldElementName string
 	isEnumString        bool
+	isEnumCombined      bool
 }
 
 type expressionChannelReference struct {
@@ -405,7 +408,13 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 	}
 	afterExecutingQueries := time.Now()
 
-	frame, err := generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
+	var frame *data.Frame
+	if fqm.AnnotationType != "" {
+		// Any annotationType set means we want the flat annotation frame format
+		frame, err = generateAnnotationFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
+	} else {
+		frame, err = generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
+	}
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating data frame: %v", err.Error()))
 	}
@@ -583,10 +592,10 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				}
 			}
 		case "CHANNEL_DATA_TYPE_ENUM":
-			for _, v := range []bool{true, false} {
+			if enumDisplay == EnumDisplayCombined {
 				key := frameKey{
-					channelId:    d.Metadata.Channel.ChannelId,
-					isEnumString: v,
+					channelId:      d.Metadata.Channel.ChannelId,
+					isEnumCombined: true,
 				}
 				if !combineRuns {
 					key.runId = d.Metadata.Run.RunId
@@ -594,6 +603,20 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				dataMap[key] = append(dataMap[key], d)
 				if _, ok := md[key]; !ok {
 					md[key] = d.Metadata
+				}
+			} else {
+				for _, v := range []bool{true, false} {
+					key := frameKey{
+						channelId:    d.Metadata.Channel.ChannelId,
+						isEnumString: v,
+					}
+					if !combineRuns {
+						key.runId = d.Metadata.Run.RunId
+					}
+					dataMap[key] = append(dataMap[key], d)
+					if _, ok := md[key]; !ok {
+						md[key] = d.Metadata
+					}
 				}
 			}
 		default:
@@ -737,7 +760,14 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				}
 
 				for _, vv := range v {
-					if key.isEnumString {
+					if key.isEnumCombined {
+						enumName, ok := enumLookup[vv.Value]
+						if ok {
+							values[vv.Timestamp.UnixNano()] = fmt.Sprintf("[%d] %s", vv.Value, enumName)
+						} else {
+							values[vv.Timestamp.UnixNano()] = fmt.Sprintf("%d", vv.Value)
+						}
+					} else if key.isEnumString {
 						if enumName, ok := enumLookup[vv.Value]; ok {
 							values[vv.Timestamp.UnixNano()] = enumName
 						} else {
@@ -859,14 +889,18 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 			field = data.NewField(name, labels, []*uint64{})
 
 		case "CHANNEL_DATA_TYPE_ENUM":
-			// Track the base name for this enum field
-			enumFieldBaseNames[name] = true
-			if key.isEnumString {
-				name = name + "_string"
+			if key.isEnumCombined {
 				field = data.NewField(name, labels, []*string{})
 			} else {
-				name = name + "_value"
-				field = data.NewField(name, labels, []*uint32{})
+				// Track the base name for this enum field
+				enumFieldBaseNames[name] = true
+				if key.isEnumString {
+					name = name + "_string"
+					field = data.NewField(name, labels, []*string{})
+				} else {
+					name = name + "_value"
+					field = data.NewField(name, labels, []*uint32{})
+				}
 			}
 
 		case "CHANNEL_DATA_TYPE_BIT_FIELD":
@@ -950,6 +984,206 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 
 	// Check for precision loss in INT64/UINT64 fields
 	checkInt64PrecisionLoss(frame)
+
+	return frame, nil
+}
+
+// generateAnnotationFrame creates an annotation-compatible data frame by reusing generateDataFrame
+// and converting it to a flat row-per-event format with metadata columns.
+func generateAnnotationFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, enumDisplay string) (*data.Frame, error) {
+	// Use combined mode for enums so we get a single "string (number)" field
+	annotationEnumDisplay := enumDisplay
+	if annotationEnumDisplay == "" || annotationEnumDisplay == EnumDisplayBoth {
+		annotationEnumDisplay = EnumDisplayCombined
+	}
+	sourceFrame, err := generateDataFrame(responseData, calculatedChannelKeys, combineRuns, annotationEnumDisplay)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the time field
+	var timeField *data.Field
+	for _, f := range sourceFrame.Fields {
+		if f.Type() == data.FieldTypeTime {
+			timeField = f
+			break
+		}
+	}
+	if timeField == nil {
+		return nil, fmt.Errorf("no time field found in source frame")
+	}
+
+	// Collect annotation entries from all value fields
+	type annotationEntry struct {
+		timestamp   time.Time
+		value       string
+		channelId   string
+		channelName string
+		assetId     string
+		assetName   string
+		runId       string
+		runName     string
+	}
+	var entries []annotationEntry
+
+	// Track which metadata fields have values
+	hasChannelId := false
+	hasAssetId := false
+	hasAssetName := false
+	hasRunId := false
+	hasRunName := false
+
+	for _, field := range sourceFrame.Fields {
+		if field.Type() == data.FieldTypeTime {
+			continue
+		}
+
+		// Extract metadata from labels
+		labels := field.Labels
+		channelName := field.Name
+		channelId := labels["channel_id"]
+		assetName := labels["asset"]
+		assetId := labels["asset_id"]
+		runName := labels["run"]
+		runId := labels["run_id"]
+
+		// Track which fields exist
+		if channelId != "" {
+			hasChannelId = true
+		}
+		if assetId != "" {
+			hasAssetId = true
+		}
+		if assetName != "" {
+			hasAssetName = true
+		}
+		if runId != "" {
+			hasRunId = true
+		}
+		if runName != "" {
+			hasRunName = true
+		}
+
+		// Iterate through all rows
+		for i := 0; i < field.Len(); i++ {
+			val := field.At(i)
+			if val == nil {
+				continue
+			}
+
+			t := timeField.At(i).(time.Time)
+
+			// Convert value to string
+			var valueStr string
+			switch v := val.(type) {
+			case *string:
+				if v != nil {
+					valueStr = *v
+				}
+			case *bool:
+				if v != nil {
+					valueStr = strconv.FormatBool(*v)
+				}
+			case *float64:
+				if v != nil {
+					valueStr = strconv.FormatFloat(*v, 'f', -1, 64)
+				}
+			case *float32:
+				if v != nil {
+					valueStr = strconv.FormatFloat(float64(*v), 'f', -1, 32)
+				}
+			case *int64:
+				if v != nil {
+					valueStr = strconv.FormatInt(*v, 10)
+				}
+			case *int32:
+				if v != nil {
+					valueStr = strconv.FormatInt(int64(*v), 10)
+				}
+			case *uint64:
+				if v != nil {
+					valueStr = strconv.FormatUint(*v, 10)
+				}
+			case *uint32:
+				if v != nil {
+					valueStr = strconv.FormatUint(uint64(*v), 10)
+				}
+			default:
+				valueStr = fmt.Sprintf("%v", val)
+			}
+
+			entries = append(entries, annotationEntry{
+				timestamp:   t,
+				value:       valueStr,
+				channelId:   channelId,
+				channelName: channelName,
+				assetId:     assetId,
+				assetName:   assetName,
+				runId:       runId,
+				runName:     runName,
+			})
+		}
+	}
+
+	// Sort by timestamp
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].timestamp.Before(entries[j].timestamp)
+	})
+
+	// Build annotation frame
+	n := len(entries)
+	times := make([]time.Time, n)
+	values := make([]string, n)
+	channelNames := make([]string, n)
+
+	for i, e := range entries {
+		times[i] = e.timestamp
+		values[i] = e.value
+		channelNames[i] = e.channelName
+	}
+
+	frame := data.NewFrame("annotations",
+		data.NewField("time", nil, times),
+		data.NewField("value", nil, values),
+		data.NewField("channelName", nil, channelNames),
+	)
+
+	// Conditionally add metadata fields
+	if hasChannelId {
+		channelIds := make([]string, n)
+		for i, e := range entries {
+			channelIds[i] = e.channelId
+		}
+		frame.Fields = append(frame.Fields, data.NewField("channelId", nil, channelIds))
+	}
+	if hasAssetName {
+		assetNames := make([]string, n)
+		for i, e := range entries {
+			assetNames[i] = e.assetName
+		}
+		frame.Fields = append(frame.Fields, data.NewField("assetName", nil, assetNames))
+	}
+	if hasAssetId {
+		assetIds := make([]string, n)
+		for i, e := range entries {
+			assetIds[i] = e.assetId
+		}
+		frame.Fields = append(frame.Fields, data.NewField("assetId", nil, assetIds))
+	}
+	if hasRunName {
+		runNames := make([]string, n)
+		for i, e := range entries {
+			runNames[i] = e.runName
+		}
+		frame.Fields = append(frame.Fields, data.NewField("runName", nil, runNames))
+	}
+	if hasRunId {
+		runIds := make([]string, n)
+		for i, e := range entries {
+			runIds[i] = e.runId
+		}
+		frame.Fields = append(frame.Fields, data.NewField("runId", nil, runIds))
+	}
 
 	return frame, nil
 }

@@ -86,6 +86,10 @@ Asset, Run, and Channel queries are cached to speed up regular expression querie
 
 Both caches may be cleared for a panel by clicking the "Clear cache" button next to the Query Mode selector.
 
+#### Annotations
+
+Annotations are supported and enable querying Sift Annotations or using regular Sift data queries to visualize data, such as enum state changes, as annotations.
+
 ## Learn More
 
 - [Sift](https://www.siftstack.com/)

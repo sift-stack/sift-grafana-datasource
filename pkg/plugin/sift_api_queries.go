@@ -233,7 +233,7 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 		}
 
 		if response.ErrorMessage != "" {
-			return nil, fmt.Errorf(response.ErrorMessage)
+			return nil, fmt.Errorf("%s", response.ErrorMessage)
 		}
 
 		responseData = append(responseData, response.Data...)

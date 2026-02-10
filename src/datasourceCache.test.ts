@@ -1,6 +1,11 @@
 import { DataQueryRequest, DataQueryResponse, FieldType, dateTime, toDataFrame, Field } from '@grafana/data';
 import { of } from 'rxjs';
-import { SiftDataSourceCache, MIN_LIVE_LOOKBACK_TIME_MS, filterFrameByTimeRange } from './datasourceCache';
+import {
+  SiftDataSourceCache,
+  MIN_LIVE_LOOKBACK_TIME_MS,
+  filterFrameByTimeRange,
+  appendFramesByTime,
+} from './datasourceCache';
 import { SiftQuery } from './types';
 
 // Mock the template service
@@ -467,6 +472,104 @@ describe('SiftDataSourceCache', () => {
           expect(minTime).toBeCloseTo(MOCK_TIME, -3);
           expect(maxTime).toBeCloseTo(MOCK_TIME + HOUR * 2, -3);
         }
+      });
+    });
+
+    describe('annotation frames', () => {
+      const createMockAnnotationFrame = (
+        annotations: Array<{
+          time: number;
+          timeEnd?: number;
+          title: string;
+          text: string;
+          tags: string;
+          annotationId: string;
+        }>,
+        refId = 'A'
+      ) => {
+        return toDataFrame({
+          name: 'annotations',
+          refId,
+          fields: [
+            { name: 'time', type: FieldType.time, values: annotations.map((a) => a.time) },
+            { name: 'timeEnd', type: FieldType.time, values: annotations.map((a) => a.timeEnd ?? null) },
+            { name: 'title', type: FieldType.string, values: annotations.map((a) => a.title) },
+            { name: 'text', type: FieldType.string, values: annotations.map((a) => a.text) },
+            { name: 'tags', type: FieldType.string, values: annotations.map((a) => a.tags) },
+            { name: 'annotationId', type: FieldType.string, values: annotations.map((a) => a.annotationId) },
+          ],
+        });
+      };
+
+      it('should append annotation frames with duplicate timestamps', () => {
+        // dataQuery annotations flatten wide frames, producing multiple rows at the same timestamp
+        const cached = createMockAnnotationFrame([
+          { time: MOCK_TIME, title: 'ch1 val', text: '42', tags: '', annotationId: 'a1' },
+          { time: MOCK_TIME, title: 'ch2 val', text: '99', tags: '', annotationId: 'a2' },
+          { time: MOCK_TIME + 10 * MINUTE, title: 'ch1 val', text: '43', tags: '', annotationId: 'a3' },
+        ]);
+        const fresh = createMockAnnotationFrame([
+          { time: MOCK_TIME + HOUR, title: 'ch1 val', text: '50', tags: '', annotationId: 'a4' },
+          { time: MOCK_TIME + HOUR, title: 'ch2 val', text: '88', tags: '', annotationId: 'a5' },
+        ]);
+
+        const merged = appendFramesByTime(cached, fresh);
+
+        expect(merged.fields).toHaveLength(6);
+        expect(merged.fields.find((f) => f.name === 'time')?.values).toEqual([
+          MOCK_TIME, MOCK_TIME, MOCK_TIME + 10 * MINUTE, MOCK_TIME + HOUR, MOCK_TIME + HOUR,
+        ]);
+        expect(merged.fields.find((f) => f.name === 'title')?.values).toEqual([
+          'ch1 val', 'ch2 val', 'ch1 val', 'ch1 val', 'ch2 val',
+        ]);
+        expect(merged.fields.find((f) => f.name === 'annotationId')?.values).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
+      });
+
+      it('should invalidate cache when annotationFilter changes', async () => {
+        mockFetchCallback.mockImplementation(() => {
+          const frame = createMockAnnotationFrame([
+            { time: MOCK_TIME, title: 'Ann 1', text: 'Desc', tags: '', annotationId: 'a1' },
+          ]);
+          return of({ data: [frame] } as DataQueryResponse);
+        });
+
+        const makeRequest = (filter: string): DataQueryRequest<SiftQuery> => ({
+          requestId: 'mock-request',
+          interval: '1m',
+          intervalMs: MINUTE,
+          panelId: 1,
+          range: {
+            from: dateTime(MOCK_TIME),
+            to: dateTime(MOCK_TIME + HOUR),
+            raw: { from: dateTime(MOCK_TIME), to: dateTime(MOCK_TIME + HOUR) },
+          },
+          scopedVars: {},
+          targets: [
+            {
+              refId: 'A',
+              queryVersion: '2',
+              channelDataQueries: [],
+              annotationType: 'annotationsQuery' as const,
+              annotationFilter: filter,
+            },
+          ],
+          timezone: 'utc',
+          app: 'dashboard',
+          startTime: 0,
+        });
+
+        await cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback);
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+
+        mockFetchCallback.mockClear();
+
+        // Same filter — cache hit
+        await cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback);
+        expect(mockFetchCallback).not.toHaveBeenCalled();
+
+        // Different filter — cache miss
+        await cache.queryWithCache(makeRequest("asset_name == 'rover_2'"), mockFetchCallback);
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
       });
     });
   });

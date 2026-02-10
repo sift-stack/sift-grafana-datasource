@@ -1,16 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2, QueryEditorProps } from '@grafana/data';
-import {
-  Icon,
-  InlineField,
-  InlineFieldRow,
-  Input,
-  RadioButtonGroup,
-  Text,
-  TextLink,
-  useStyles2,
-} from '@grafana/ui';
+import { Icon, InlineField, InlineFieldRow, Input, RadioButtonGroup, Text, TextLink, useStyles2 } from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
 import { AnnotationQueryType, SiftQuery, SiftDataSourceOptions } from '../types';
 import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
@@ -124,7 +115,7 @@ const AnnotationFilterDocs = () => {
 
 export const AnnotationQueryEditor = (props: Props) => {
   const { query, onChange, onRunQuery } = props;
-  const [annotationType, setAnnotationType] = useState<AnnotationQueryType>('dataQuery');
+  const [annotationType, setAnnotationType] = useState<AnnotationQueryType>('annotationsQuery');
   const [annotationFilter, setAnnotationFilter] = useState('');
   const [initialized, setInitialized] = useState(false);
 
@@ -134,7 +125,7 @@ export const AnnotationQueryEditor = (props: Props) => {
       return;
     }
 
-    const initAnnotationType = query.annotationType || 'dataQuery';
+    const initAnnotationType = query.annotationType || 'annotationsQuery';
     setAnnotationType(initAnnotationType);
     setAnnotationFilter(query.annotationFilter || '');
 
@@ -185,11 +176,11 @@ export const AnnotationQueryEditor = (props: Props) => {
     onRunQuery();
   }, [query, onChange, onRunQuery, annotationType, annotationFilter]);
 
+  const styles = useStyles2(getStyles);
+
   if (!initialized) {
     return <div>Loading...</div>;
   }
-
-  const styles = useStyles2(getStyles);
 
   return (
     <div>
@@ -223,7 +214,7 @@ export const AnnotationQueryEditor = (props: Props) => {
                 value={annotationFilter}
                 onChange={onAnnotationFilterChange}
                 onBlur={onAnnotationFilterBlur}
-                placeholder="asset_name == 'rover_1'"
+                placeholder="example: asset_name == 'rover_1'"
               />
             </InlineField>
           </InlineFieldRow>

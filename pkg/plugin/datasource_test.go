@@ -2314,6 +2314,562 @@ func TestCheckInt64PrecisionLoss(t *testing.T) {
 	}
 }
 
+// TestGenerateSiftAnnotationsFrame tests the generateSiftAnnotationsFrame function
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameBasic() {
+	annotations := []SiftAnnotation{
+		{
+			AnnotationId:   "ann1",
+			Name:           "Phase Start",
+			Description:    "Engine ignition phase started",
+			StartTime:      "2025-01-15T10:00:00Z",
+			EndTime:        "2025-01-15T10:05:00Z",
+			CreatedDate:    "2025-01-15T09:00:00Z",
+			ModifiedDate:   "2025-01-15T09:00:00Z",
+			OrganizationId: "org1",
+			AnnotationType: "ANNOTATION_TYPE_PHASE",
+			Tags:           []string{"engine", "ignition"},
+			State:          "ANNOTATION_STATE_OPEN",
+			RunId:          "run1",
+			AssetIds:       []string{"asset1", "asset2"},
+		},
+		{
+			AnnotationId:   "ann2",
+			Name:           "Anomaly Detected",
+			Description:    "Temperature spike observed",
+			StartTime:      "2025-01-15T10:02:00Z",
+			EndTime:        "",
+			CreatedDate:    "2025-01-15T10:02:00Z",
+			ModifiedDate:   "2025-01-15T10:02:00Z",
+			OrganizationId: "org1",
+			AnnotationType: "ANNOTATION_TYPE_POINT",
+			Tags:           []string{},
+			State:          "ANNOTATION_STATE_OPEN",
+			RunId:          "run1",
+			AssetIds:       []string{"asset1"},
+		},
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	s.NoError(err)
+	s.NotNil(frame)
+	s.Equal("annotations", frame.Name)
+
+	// Base fields: time, timeEnd, title, text, tags, annotationId, annotationType, state
+	// Optional fields: runId, assetIds (both present)
+	s.Equal(10, len(frame.Fields))
+
+	// Verify field names
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("timeEnd", frame.Fields[1].Name)
+	s.Equal("title", frame.Fields[2].Name)
+	s.Equal("text", frame.Fields[3].Name)
+	s.Equal("tags", frame.Fields[4].Name)
+	s.Equal("annotationId", frame.Fields[5].Name)
+	s.Equal("annotationType", frame.Fields[6].Name)
+	s.Equal("state", frame.Fields[7].Name)
+	s.Equal("runId", frame.Fields[8].Name)
+	s.Equal("assetIds", frame.Fields[9].Name)
+
+	// Verify row count
+	s.Equal(2, frame.Fields[0].Len())
+
+	// Verify first annotation values
+	startTime1, _ := time.Parse(time.RFC3339Nano, "2025-01-15T10:00:00Z")
+	endTime1, _ := time.Parse(time.RFC3339Nano, "2025-01-15T10:05:00Z")
+	s.Equal(startTime1, frame.Fields[0].At(0))
+	s.Equal(&endTime1, frame.Fields[1].At(0))
+	s.Equal("Phase Start", frame.Fields[2].At(0))
+	s.Equal("Engine ignition phase started", frame.Fields[3].At(0))
+	s.Equal("engine, ignition", frame.Fields[4].At(0))
+	s.Equal("ann1", frame.Fields[5].At(0))
+	s.Equal("ANNOTATION_TYPE_PHASE", frame.Fields[6].At(0))
+	s.Equal("ANNOTATION_STATE_OPEN", frame.Fields[7].At(0))
+	s.Equal("run1", frame.Fields[8].At(0))
+	s.Equal("asset1, asset2", frame.Fields[9].At(0))
+
+	// Verify second annotation - no end time
+	startTime2, _ := time.Parse(time.RFC3339Nano, "2025-01-15T10:02:00Z")
+	s.Equal(startTime2, frame.Fields[0].At(1))
+	s.Nil(frame.Fields[1].At(1).(*time.Time))
+	s.Equal("Anomaly Detected", frame.Fields[2].At(1))
+	s.Equal("Temperature spike observed", frame.Fields[3].At(1))
+	s.Equal("", frame.Fields[4].At(1))
+	s.Equal("asset1", frame.Fields[9].At(1))
+}
+
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameEmpty() {
+	frame, err := generateSiftAnnotationsFrame([]SiftAnnotation{})
+	s.NoError(err)
+	s.NotNil(frame)
+	s.Equal("annotations", frame.Name)
+
+	// Should have 8 base fields, no optional fields
+	s.Equal(8, len(frame.Fields))
+	s.Equal(0, frame.Fields[0].Len())
+}
+
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameNoOptionalFields() {
+	annotations := []SiftAnnotation{
+		{
+			AnnotationId:   "ann1",
+			Name:           "Simple Annotation",
+			Description:    "No run or assets",
+			StartTime:      "2025-01-15T10:00:00Z",
+			OrganizationId: "org1",
+			AnnotationType: "ANNOTATION_TYPE_POINT",
+			State:          "ANNOTATION_STATE_OPEN",
+		},
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	s.NoError(err)
+	s.NotNil(frame)
+
+	// Should only have 8 base fields (no runId or assetIds)
+	s.Equal(8, len(frame.Fields))
+
+	fieldNames := make([]string, len(frame.Fields))
+	for i, f := range frame.Fields {
+		fieldNames[i] = f.Name
+	}
+	s.NotContains(fieldNames, "runId")
+	s.NotContains(fieldNames, "assetIds")
+}
+
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameInvalidStartTime() {
+	annotations := []SiftAnnotation{
+		{
+			AnnotationId: "ann1",
+			Name:         "Bad Time",
+			StartTime:    "not-a-timestamp",
+		},
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	s.Nil(frame)
+	s.Error(err)
+	s.Contains(err.Error(), "error parsing start_time for annotation ann1")
+}
+
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameInvalidEndTime() {
+	annotations := []SiftAnnotation{
+		{
+			AnnotationId: "ann1",
+			Name:         "Bad End Time",
+			StartTime:    "2025-01-15T10:00:00Z",
+			EndTime:      "not-a-timestamp",
+		},
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	s.Nil(frame)
+	s.Error(err)
+	s.Contains(err.Error(), "error parsing end_time for annotation ann1")
+}
+
+func (s *DatasourceTestSuite) TestGenerateSiftAnnotationsFrameMultipleTags() {
+	annotations := []SiftAnnotation{
+		{
+			AnnotationId:   "ann1",
+			Name:           "Tagged",
+			StartTime:      "2025-01-15T10:00:00Z",
+			OrganizationId: "org1",
+			AnnotationType: "ANNOTATION_TYPE_PHASE",
+			Tags:           []string{"tag1", "tag2", "tag3"},
+		},
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	s.NoError(err)
+	s.Equal("tag1, tag2, tag3", frame.Fields[4].At(0))
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBasicDouble() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Run: struct {
+					RunId string "json:\"runId\""
+					Name  string "json:\"name\""
+				}{
+					RunId: "run1",
+					Name:  "Run 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Temperature",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 23.5},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 24.1}
+			]`),
+		},
+	}
+
+	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	s.NoError(err)
+	s.NotNil(frame)
+	s.Equal("annotations", frame.Name)
+
+	// Base fields: time, value, channelName + conditional: channelId, assetName, assetId, runName, runId
+	s.Equal(8, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("value", frame.Fields[1].Name)
+	s.Equal("channelName", frame.Fields[2].Name)
+	s.Equal("channelId", frame.Fields[3].Name)
+	s.Equal("assetName", frame.Fields[4].Name)
+	s.Equal("assetId", frame.Fields[5].Name)
+	s.Equal("runName", frame.Fields[6].Name)
+	s.Equal("runId", frame.Fields[7].Name)
+
+	// Verify row count
+	s.Equal(2, frame.Fields[0].Len())
+
+	// Verify values are converted to strings
+	s.Equal("23.5", frame.Fields[1].At(0))
+	s.Equal("24.1", frame.Fields[1].At(1))
+
+	// Verify channel name
+	s.Equal("Temperature", frame.Fields[2].At(0))
+	s.Equal("Temperature", frame.Fields[2].At(1))
+
+	// Verify metadata
+	s.Equal("channel1", frame.Fields[3].At(0))
+	s.Equal("Asset 1", frame.Fields[4].At(0))
+	s.Equal("asset1", frame.Fields[5].At(0))
+	s.Equal("Run 1", frame.Fields[6].At(0))
+	s.Equal("run1", frame.Fields[7].At(0))
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameMultipleChannelsSameTimestamp() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Temperature",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 23.5}
+			]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_INT_32",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel2",
+					Name:      "Pressure",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 100}
+			]`),
+		},
+	}
+
+	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	s.NoError(err)
+	s.NotNil(frame)
+
+	// Both channels share the same timestamp, so the wide frame has 1 row with 2 value columns.
+	// generateAnnotationFrame flattens each value field into separate entries.
+	// Verify we get entries for both channels.
+	rowCount := frame.Fields[0].Len()
+	s.GreaterOrEqual(rowCount, 2)
+
+	// Collect all channel names from the frame
+	channelNames := make(map[string]bool)
+	for i := 0; i < frame.Fields[2].Len(); i++ {
+		channelNames[frame.Fields[2].At(i).(string)] = true
+	}
+	s.True(channelNames["Temperature"])
+	s.True(channelNames["Pressure"])
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameEnumUsesCombinedMode() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ON", Key: 1},
+						{Name: "OFF", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 2}
+			]`),
+		},
+	}
+
+	// When enumDisplay is "both", generateAnnotationFrame should override to combined
+	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	s.NoError(err)
+	s.NotNil(frame)
+
+	// Should produce a single combined field per enum channel, not two
+	s.Equal(2, frame.Fields[0].Len())
+
+	// Channel name should be base name (no _string/_value suffix)
+	s.Equal("Status", frame.Fields[2].At(0))
+
+	// Values should be combined format "[number] string"
+	s.Equal("[1] ON", frame.Fields[1].At(0))
+	s.Equal("[2] OFF", frame.Fields[1].At(1))
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameNoMetadata() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					Name: "Temperature",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 23.5}
+			]`),
+		},
+	}
+
+	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	s.NoError(err)
+	s.NotNil(frame)
+
+	// Should only have 3 base fields (time, value, channelName) - no optional metadata
+	s.Equal(3, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("value", frame.Fields[1].Name)
+	s.Equal("channelName", frame.Fields[2].Name)
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameHandlesNullValues() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					Name: "Temperature",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 23.5},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": null},
+				{"timestamp": "` + now.Add(2*time.Second).Format(time.RFC3339Nano) + `", "value": 25.0}
+			]`),
+		},
+	}
+
+	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	s.NoError(err)
+	s.NotNil(frame)
+
+	// All 3 rows are present. Null JSON values are deserialized as zero values
+	// by generateDataFrame, so they appear as "0" in the annotation frame.
+	s.Equal(3, frame.Fields[0].Len())
+	s.Equal("23.5", frame.Fields[1].At(0))
+	s.Equal("0", frame.Fields[1].At(1))
+	s.Equal("25", frame.Fields[1].At(2))
+}
+
+func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBoolValues() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_BOOL",
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					Name: "Switch",
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": true},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": false}
+			]`),
+		},
+	}
+
+	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	s.NoError(err)
+	s.NotNil(frame)
+
+	s.Equal(2, frame.Fields[0].Len())
+	s.Equal("true", frame.Fields[1].At(0))
+	s.Equal("false", frame.Fields[1].At(1))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedMode() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ON", Key: 1},
+						{Name: "OFF", Key: 2},
+						{Name: "STANDBY", Key: 3},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1},
+				{"timestamp": "` + now.Add(time.Second).Format(time.RFC3339Nano) + `", "value": 2},
+				{"timestamp": "` + now.Add(2*time.Second).Format(time.RFC3339Nano) + `", "value": 3}
+			]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	s.NoError(err)
+
+	// Combined mode should produce a single field (plus time), not two
+	s.Equal(2, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Status", frame.Fields[1].Name)
+
+	// Verify combined values are "[number] string" format
+	s.Equal("[1] ON", *frame.Fields[1].At(0).(*string))
+	s.Equal("[2] OFF", *frame.Fields[1].At(1).(*string))
+	s.Equal("[3] STANDBY", *frame.Fields[1].At(2).(*string))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedVsBothMode() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_ENUM",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{
+					AssetId: "asset1",
+					Name:    "Asset 1",
+				},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{
+					ChannelId: "channel1",
+					Name:      "Status",
+					EnumTypes: []queryResponseChannelEnumType{
+						{Name: "ON", Key: 1},
+						{Name: "OFF", Key: 2},
+					},
+				},
+			},
+			Values: json.RawMessage(`[
+				{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1}
+			]`),
+		},
+	}
+
+	// "both" mode should produce two fields (string + value)
+	frameBoth, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	s.NoError(err)
+	s.Equal(3, len(frameBoth.Fields)) // time + Status_string + Status_value
+
+	// "combined" mode should produce one field
+	frameCombined, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	s.NoError(err)
+	s.Equal(2, len(frameCombined.Fields)) // time + Status
+}
+
 // Helper functions for tests
 func int64Ptr(v int64) *int64 {
 	return &v

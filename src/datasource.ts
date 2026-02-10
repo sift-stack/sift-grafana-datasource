@@ -1,4 +1,11 @@
-import { CoreApp, DataQueryRequest, DataQueryResponse, DataSourceInstanceSettings, ScopedVars } from '@grafana/data';
+import {
+  AnnotationSupport,
+  CoreApp,
+  DataQueryRequest,
+  DataQueryResponse,
+  DataSourceInstanceSettings,
+  ScopedVars,
+} from '@grafana/data';
 import { DataSourceWithBackend } from '@grafana/runtime';
 import { Observable, from } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
@@ -6,8 +13,12 @@ import { SiftVariableSupport } from 'variables';
 import { SiftDataSourceCache } from './datasourceCache';
 import { DEFAULT_QUERY, SiftDataSourceOptions, SiftQuery, QUERY_VERSION } from './types';
 import { ensureQueryDefaults, filterQueryBeforeRequest, replaceTemplateVariablesInQuery } from './utils';
+import { AnnotationQueryEditor } from './components/AnnotationQueryEditor';
 
 export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSourceOptions> {
+  annotations: AnnotationSupport<SiftQuery> = {
+    QueryEditor: AnnotationQueryEditor,
+  };
   cache: SiftDataSourceCache;
   private readonly restApiUrl?: string;
   private readonly frontendUrl?: string;

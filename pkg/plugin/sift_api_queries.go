@@ -59,6 +59,29 @@ type listChannelsQueryResponse struct {
 	NextPageToken string    `json:"nextPageToken"`
 }
 
+type SiftAnnotation struct {
+	AnnotationId   string   `json:"annotationId"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	StartTime      string   `json:"startTime"`
+	EndTime        string   `json:"endTime"`
+	CreatedDate    string   `json:"createdDate"`
+	ModifiedDate   string   `json:"modifiedDate"`
+	RunId          string   `json:"runId,omitempty"`
+	OrganizationId string   `json:"organizationId"`
+	AnnotationType string   `json:"annotationType"`
+	Tags           []string `json:"tags"`
+	State          string   `json:"state,omitempty"`
+	Pending        bool     `json:"pending"`
+	AssetIds       []string `json:"assetIds"`
+	IsArchived     bool     `json:"isArchived"`
+}
+
+type listSiftAnnotationsResponse struct {
+	Annotations   []SiftAnnotation `json:"annotations"`
+	NextPageToken string           `json:"nextPageToken"`
+}
+
 type apiRequest struct {
 	pCtx        backend.PluginContext
 	method      string
@@ -203,6 +226,40 @@ func handlePaginatedRequest[T any](
 
 	return results, nil
 }
+func (d *SiftDatasource) listSiftAnnotations(pCtx backend.PluginContext, query backend.DataQuery, filter string) ([]SiftAnnotation, error) {
+	params := url.Values{}
+
+	// Build time filter using CEL
+	startTimeFilter := celUtils.GreaterThanOrEqual("start_time", fmt.Sprintf("timestamp('%s')", query.TimeRange.From.Format(time.RFC3339Nano)))
+	endTimeFilter := celUtils.LessThanOrEqual("start_time", fmt.Sprintf("timestamp('%s')", query.TimeRange.To.Format(time.RFC3339Nano)))
+	timeFilter := celUtils.And(startTimeFilter, endTimeFilter)
+
+	if filter != "" {
+		params.Set("filter", celUtils.And(timeFilter, filter))
+	} else {
+		params.Set("filter", timeFilter)
+	}
+
+	annotations, err := handlePaginatedRequest[SiftAnnotation](d, apiRequest{
+		pCtx:        pCtx,
+		method:      "GET",
+		path:        "/api/v1/annotations",
+		queryParams: params,
+	}, 1000, 10, func(respBody []byte) ([]SiftAnnotation, string, error) {
+		response := listSiftAnnotationsResponse{}
+		err := json.Unmarshal(respBody, &response)
+		if err != nil {
+			return nil, "", fmt.Errorf("json unmarshal: %w", err)
+		}
+		return response.Annotations, response.NextPageToken, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return annotations, nil
+}
+
 func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftApiGetDataSubQuery, query backend.DataQuery) ([]queryResponseData, error) {
 	backendQuery := siftApiGetDataQuery{
 		Queries:   subQueries,

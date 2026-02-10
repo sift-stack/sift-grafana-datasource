@@ -236,6 +236,7 @@ export const replaceTemplateVariablesInQuery = (query: SiftQuery, scopedVars: Sc
 
   return {
     ...query,
+    annotationFilter: query.annotationFilter ? templateSrv.replace(query.annotationFilter, scopedVars) : query.annotationFilter,
     channelDataQueries: query.channelDataQueries?.map((cdq) => {
       return {
         ...cdq,

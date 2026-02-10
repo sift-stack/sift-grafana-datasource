@@ -12,6 +12,101 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "sift-grafana-datasource",
+          "uid": "P5B56D21E16392E86"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "text",
+        "name": "Vehicle State Changes",
+        "target": {
+          "annotationType": "dataQuery",
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "asSelect": true,
+                  "assetId": "60a0e291-9ce7-4d45-bdea-bb0a2c2afe65",
+                  "assetName": "rover_1"
+                }
+              ],
+              "calculatedChannelQueries": [
+                {
+                  "channelReferences": [
+                    {
+                      "asSelect": true,
+                      "channelName": "vehicle_state",
+                      "channelReference": "$1"
+                    }
+                  ],
+                  "expression": "filter($1, previous($1) != $1)",
+                  "name": "vehicle_state_changes"
+                }
+              ],
+              "channelQueries": [
+                {
+                  "asSelect": true
+                }
+              ],
+              "runQueries": [
+                {
+                  "asSelect": true
+                }
+              ]
+            }
+          ],
+          "combineRuns": true,
+          "enumDisplay": "both",
+          "hide": false,
+          "key": "",
+          "queryType": "",
+          "queryVersion": "2.1",
+          "refId": ""
+        }
+      },
+      {
+        "datasource": {
+          "type": "sift-grafana-datasource",
+          "uid": "P5B56D21E16392E86"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "red",
+        "name": "Sift Annotations",
+        "target": {
+          "annotationFilter": "asset_id == '${assetQuery}'",
+          "annotationType": "annotationsQuery",
+          "channelDataQueries": [
+            {
+              "assetQueries": [
+                {
+                  "asSelect": true
+                }
+              ],
+              "calculatedChannelQueries": [],
+              "channelQueries": [
+                {
+                  "asSelect": true
+                }
+              ],
+              "runQueries": [
+                {
+                  "asSelect": true
+                }
+              ]
+            }
+          ],
+          "combineRuns": true,
+          "enumDisplay": "",
+          "hide": false,
+          "key": "",
+          "queryType": "",
+          "queryVersion": "2.1",
+          "refId": ""
+        }
       }
     ]
   },

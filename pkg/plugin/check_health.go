@@ -14,7 +14,7 @@ import (
 // The main use case for these health checks is the test button on the
 // datasource configuration page which allows users to verify that
 // a datasource is working as expected.
-func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+func (d *SiftDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	u, err := getApiUrl(req.PluginContext.DataSourceInstanceSettings)
 	if err != nil {
 		return &backend.CheckHealthResult{
@@ -23,7 +23,7 @@ func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealth
 		}, nil
 	}
 	u.Path = "/api/v1/me"
-	request, err := http.NewRequest("GET", u.String(), nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
@@ -31,7 +31,7 @@ func (d *SiftDatasource) CheckHealth(_ context.Context, req *backend.CheckHealth
 		}, nil
 	}
 	request.Header.Set("Authorization", "Bearer "+req.PluginContext.DataSourceInstanceSettings.DecryptedSecureJSONData["apiKey"])
-	resp, err := http.DefaultClient.Do(request)
+	resp, err := d.httpClient.Do(request)
 	if err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,

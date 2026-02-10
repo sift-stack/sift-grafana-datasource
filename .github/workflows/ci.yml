@@ -55,14 +55,15 @@ jobs:
 
       - name: Setup Go environment
         if: steps.check-for-backend.outputs.has-backend == 'true'
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.23.5'
+          go-version: '1.25.6'
 
       - name: Golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.0
+          version: latest
           args: --timeout=5m
 
       - name: Test backend

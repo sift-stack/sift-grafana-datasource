@@ -72,6 +72,7 @@ export interface SiftQuery extends DataQuery {
   enumDisplay?: EnumDisplayType;
   queryVersion: string;
   annotationType?: AnnotationQueryType;
+  annotationFilter?: string;
 }
 
 export const DEFAULT_QUERY: Partial<SiftQuery> = {

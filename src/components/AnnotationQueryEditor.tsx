@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { QueryEditorProps } from '@grafana/data';
-import { InlineField, InlineFieldRow, InlineLabel, RadioButtonGroup } from '@grafana/ui';
+import { css } from '@emotion/css';
+import { GrafanaTheme2, QueryEditorProps } from '@grafana/data';
+import {
+  Icon,
+  InlineField,
+  InlineFieldRow,
+  Input,
+  RadioButtonGroup,
+  Text,
+  TextLink,
+  useStyles2,
+} from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
 import { AnnotationQueryType, SiftQuery, SiftDataSourceOptions } from '../types';
 import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
@@ -16,13 +26,106 @@ const ANNOTATION_QUERY_TYPES: Array<{ label: string; value: AnnotationQueryType;
   {
     label: 'Sift Annotations',
     value: 'annotationsQuery',
-    description: 'Query Sift annotations API (coming soon)',
+    description: 'Query Sift annotations from the Sift API',
   },
 ];
+
+const getStyles = (theme: GrafanaTheme2) => ({
+  description: css({
+    marginTop: theme.spacing(0.5),
+    marginBottom: theme.spacing(1),
+  }),
+  docsContent: css({
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: theme.spacing(0.5),
+  }),
+  examplesList: css({
+    margin: 0,
+    paddingLeft: theme.spacing(2),
+    listStyleType: 'disc',
+  }),
+  docsSection: css({
+    marginTop: theme.spacing(0.5),
+  }),
+  docsToggle: css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.5),
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.bodySmall.fontSize,
+    '&:hover': {
+      color: theme.colors.text.primary,
+    },
+  }),
+});
+
+const AnnotationFilterDocs = () => {
+  const styles = useStyles2(getStyles);
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className={styles.docsSection}>
+      <button className={styles.docsToggle} onClick={() => setIsOpen(!isOpen)} type="button">
+        <Icon name={isOpen ? 'angle-down' : 'angle-right'} size="sm" />
+        Filter help &amp; examples
+      </button>
+      {isOpen && (
+        <div className={styles.docsContent}>
+          <Text variant="bodySmall" color="secondary">
+            Use{' '}
+            <TextLink href="https://cel.dev/" external inline variant="bodySmall">
+              CEL (Common Expression Language)
+            </TextLink>{' '}
+            to filter annotations. Grafana dashboard variables are supported.
+          </Text>
+          <Text variant="bodySmall" color="secondary">
+            <strong>Available fields:</strong> asset_id, asset_name, name, state, annotation_type, etc. See Sift docs
+            for full list.
+          </Text>
+          <Text variant="bodySmall" color="secondary">
+            <strong>Examples:</strong>
+          </Text>
+          <ul className={styles.examplesList}>
+            <li>
+              <Text variant="bodySmall">
+                <code>asset_name == &apos;my_asset&apos;</code>
+              </Text>
+            </li>
+            <li>
+              <Text variant="bodySmall">
+                <code>asset_id == &apos;{'${assetQuery}'}&apos;</code> (using a dashboard variable)
+              </Text>
+            </li>
+            <li>
+              <Text variant="bodySmall">
+                <code>
+                  annotation_type == &apos;ANNOTATION_TYPE_PHASE&apos; && state == &apos;ANNOTATION_STATE_OPEN&apos;
+                </code>
+              </Text>
+            </li>
+          </ul>
+          <Text variant="bodySmall" color="secondary">
+            For full documentation, see the{' '}
+            <TextLink href="https://docs.siftstack.com" external inline variant="bodySmall">
+              Sift documentation
+            </TextLink>
+            .
+          </Text>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const AnnotationQueryEditor = (props: Props) => {
   const { query, onChange, onRunQuery } = props;
   const [annotationType, setAnnotationType] = useState<AnnotationQueryType>('dataQuery');
+  const [annotationFilter, setAnnotationFilter] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   // Initialize once - set annotationType if not present
@@ -33,6 +136,7 @@ export const AnnotationQueryEditor = (props: Props) => {
 
     const initAnnotationType = query.annotationType || 'dataQuery';
     setAnnotationType(initAnnotationType);
+    setAnnotationFilter(query.annotationFilter || '');
 
     // Ensure query has annotationType set
     if (!query.annotationType) {
@@ -68,9 +172,24 @@ export const AnnotationQueryEditor = (props: Props) => {
     [onChange, annotationType]
   );
 
+  const onAnnotationFilterChange = useCallback((e: React.FormEvent<HTMLInputElement>) => {
+    setAnnotationFilter(e.currentTarget.value);
+  }, []);
+
+  const onAnnotationFilterBlur = useCallback(() => {
+    onChange({
+      ...query,
+      annotationType,
+      annotationFilter,
+    });
+    onRunQuery();
+  }, [query, onChange, onRunQuery, annotationType, annotationFilter]);
+
   if (!initialized) {
     return <div>Loading...</div>;
   }
+
+  const styles = useStyles2(getStyles);
 
   return (
     <div>
@@ -82,19 +201,34 @@ export const AnnotationQueryEditor = (props: Props) => {
 
       {annotationType === 'dataQuery' && (
         <>
-          <InlineFieldRow>
-            <InlineLabel width="auto">
+          <div className={styles.description}>
+            <Text variant="bodySmall" color="secondary">
               Query channel data to use as annotations. Each data point becomes an annotation.
-            </InlineLabel>
-          </InlineFieldRow>
+            </Text>
+          </div>
           <VisualSiftQueryEditor {...props} onChange={onChangeWithAnnotationType} />
         </>
       )}
 
       {annotationType === 'annotationsQuery' && (
-        <InlineFieldRow>
-          <InlineLabel width="auto">Sift Annotations API support coming soon.</InlineLabel>
-        </InlineFieldRow>
+        <>
+          <div className={styles.description}>
+            <Text variant="bodySmall" color="secondary">
+              Query Sift Annotations from the Sift API. Time range is applied automatically.
+            </Text>
+          </div>
+          <InlineFieldRow>
+            <InlineField label="Filter (CEL)" labelWidth={12} grow>
+              <Input
+                value={annotationFilter}
+                onChange={onAnnotationFilterChange}
+                onBlur={onAnnotationFilterBlur}
+                placeholder="asset_name == 'rover_1'"
+              />
+            </InlineField>
+          </InlineFieldRow>
+          <AnnotationFilterDocs />
+        </>
       )}
     </div>
   );

@@ -86,6 +86,16 @@ func GreaterThan(field string, value float64) string {
 	return fmt.Sprintf("%s > %v", field, value)
 }
 
+// GreaterThanOrEqual generates a CEL expression that checks whether a field is greater than or equal to a given string value.
+func GreaterThanOrEqual(field string, value string) string {
+	return fmt.Sprintf(`%s >= %s`, field, value)
+}
+
+// LessThanOrEqual generates a CEL expression that checks whether a field is less than or equal to a given string value.
+func LessThanOrEqual(field string, value string) string {
+	return fmt.Sprintf(`%s <= %s`, field, value)
+}
+
 // Contains generates a CEL expression that checks whether a string field contains a given value.
 func Contains(field, value string) string {
 	return fmt.Sprintf(`%s.contains('%s')`, field, value)

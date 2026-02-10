@@ -252,6 +252,7 @@ type queryModel struct {
 	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
 	AnnotationType     string             `json:"annotationType"`
+	AnnotationFilter   string             `json:"annotationFilter"`
 }
 
 type queryResponse struct {
@@ -393,6 +394,12 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 			log.DefaultLogger.Error("recovered from panic", "error", err)
 		}
 	}()
+
+	// Route annotationsQuery to the Sift annotations API
+	if fqm.AnnotationType == "annotationsQuery" {
+		return d.querySiftAnnotations(pCtx, query, fqm)
+	}
+
 	var response backend.DataResponse
 
 	queryStart := time.Now()
@@ -1183,6 +1190,109 @@ func generateAnnotationFrame(responseData []queryResponseData, calculatedChannel
 			runIds[i] = e.runId
 		}
 		frame.Fields = append(frame.Fields, data.NewField("runId", nil, runIds))
+	}
+
+	return frame, nil
+}
+
+// querySiftAnnotations handles the annotationsQuery type by calling the Sift annotations API
+// and converting the response into a Grafana-compatible annotation data frame.
+func (d *SiftDatasource) querySiftAnnotations(pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
+	var response backend.DataResponse
+
+	annotations, err := d.listSiftAnnotations(pCtx, query, fqm.AnnotationFilter)
+	if err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error listing Sift annotations: %v", err.Error()))
+	}
+
+	frame, err := generateSiftAnnotationsFrame(annotations)
+	if err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating Sift annotations frame: %v", err.Error()))
+	}
+
+	response.Frames = append(response.Frames, frame)
+	return response
+}
+
+// generateSiftAnnotationsFrame converts a slice of SiftAnnotation into a Grafana data frame.
+func generateSiftAnnotationsFrame(annotations []SiftAnnotation) (*data.Frame, error) {
+	n := len(annotations)
+
+	startTimes := make([]time.Time, n)
+	endTimes := make([]*time.Time, n)
+	names := make([]string, n)
+	descriptions := make([]string, n)
+	annotationIds := make([]string, n)
+	annotationTypes := make([]string, n)
+	tags := make([]string, n)
+	states := make([]string, n)
+
+	// Track which optional fields have values
+	hasRunId := false
+	hasAssetIds := false
+
+	for i, a := range annotations {
+		// Parse start time
+		t, err := time.Parse(time.RFC3339Nano, a.StartTime)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing start_time for annotation %s: %w", a.AnnotationId, err)
+		}
+		startTimes[i] = t
+
+		// Parse end time (optional)
+		if a.EndTime != "" {
+			et, err := time.Parse(time.RFC3339Nano, a.EndTime)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing end_time for annotation %s: %w", a.AnnotationId, err)
+			}
+			endTimes[i] = &et
+		}
+
+		names[i] = a.Name
+		descriptions[i] = a.Description
+		annotationIds[i] = a.AnnotationId
+		annotationTypes[i] = a.AnnotationType
+		states[i] = a.State
+
+		if len(a.Tags) > 0 {
+			tags[i] = strings.Join(a.Tags, ", ")
+		}
+
+		if a.RunId != "" {
+			hasRunId = true
+		}
+		if len(a.AssetIds) > 0 {
+			hasAssetIds = true
+		}
+	}
+
+	frame := data.NewFrame("annotations",
+		data.NewField("time", nil, startTimes),
+		data.NewField("timeEnd", nil, endTimes),
+		data.NewField("title", nil, names),
+		data.NewField("text", nil, descriptions),
+		data.NewField("tags", nil, tags),
+		data.NewField("annotationId", nil, annotationIds),
+		data.NewField("annotationType", nil, annotationTypes),
+		data.NewField("state", nil, states),
+	)
+
+	// Conditionally add optional fields
+	if hasRunId {
+		runIds := make([]string, n)
+		for i, a := range annotations {
+			runIds[i] = a.RunId
+		}
+		frame.Fields = append(frame.Fields, data.NewField("runId", nil, runIds))
+	}
+	if hasAssetIds {
+		assetIds := make([]string, n)
+		for i, a := range annotations {
+			if len(a.AssetIds) > 0 {
+				assetIds[i] = strings.Join(a.AssetIds, ", ")
+			}
+		}
+		frame.Fields = append(frame.Fields, data.NewField("assetIds", nil, assetIds))
 	}
 
 	return frame, nil

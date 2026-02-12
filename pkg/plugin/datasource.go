@@ -112,6 +112,7 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 		channelsIdSearchCache:    channelIdsCache,
 		channelsNameSearchCache:  channelNameCache,
 		channelsRegexSearchCache: channelRegexCache,
+		asyncJobs:                newAsyncJobStore(),
 	}, nil
 }
 
@@ -129,13 +130,16 @@ type SiftDatasource struct {
 	// channel caches use loader to avoid duplicate API calls at the same time
 	channelsNameSearchCache  *TypedCacheWithLoader[channelSearchKey, []Channel, string]
 	channelsRegexSearchCache *TypedCacheWithLoader[channelSearchKey, []Channel, string]
+	asyncJobs                *asyncJobStore
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *SiftDatasource) Dispose() {
-	// Clean up datasource instance resources.
+	if d.asyncJobs != nil {
+		d.asyncJobs.stop()
+	}
 }
 
 func (d *SiftDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
@@ -157,6 +161,9 @@ func (d *SiftDatasource) CallResource(ctx context.Context, req *backend.CallReso
 
 	case "resolve-query-to-sift-metadata":
 		return d.resolveQueryToSiftMetadata(ctx, req, sender)
+
+	case "cancel":
+		return d.callAsyncQueryCancel(ctx, req, sender)
 
 	default:
 		return sender.Send(&backend.CallResourceResponse{
@@ -186,7 +193,20 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 			continue
 		}
 
-		res := d.query(req.PluginContext, q, *fqm)
+		// Check if this is an async query (has meta.queryFlow == "async" from the FE library)
+		var meta struct {
+			Meta struct {
+				QueryFlow string `json:"queryFlow"`
+			} `json:"meta"`
+		}
+		_ = json.Unmarshal(q.JSON, &meta)
+
+		var res backend.DataResponse
+		if meta.Meta.QueryFlow == "async" {
+			res = d.handleAsyncQuery(req.PluginContext, q, *fqm)
+		} else {
+			res = d.query(req.PluginContext, q, *fqm)
+		}
 		// save the response in a hashmap
 		// based on with RefID as identifier
 		response.Responses[q.RefID] = res

@@ -22,6 +22,11 @@ const (
 
 	asyncJobTTL      = 10 * time.Minute
 	asyncJobReapTick = 1 * time.Minute
+
+	// debugAsyncDelay adds an artificial delay before executing async queries.
+	// Set to e.g. 30*time.Second to manually test polling, then set back to 0.
+	debugAsyncDelay = 5 * time.Second // TODO: SET BACK TO ZERO BEFORE RELEASE
+
 )
 
 // asyncJob represents an in-flight or completed async query.
@@ -195,6 +200,17 @@ func (d *SiftDatasource) startAsyncQuery(pCtx backend.PluginContext, q backend.D
 			d.asyncJobs.fail(queryID, "query cancelled")
 			return
 		default:
+		}
+
+		// Apply debug delay if configured (for manual testing of async polling)
+		if debugAsyncDelay > 0 {
+			log.DefaultLogger.Debug("async query sleeping for debug delay", "queryId", queryID, "delay", debugAsyncDelay)
+			select {
+			case <-time.After(debugAsyncDelay):
+			case <-jobCtx.Done():
+				d.asyncJobs.fail(queryID, "query cancelled during debug delay")
+				return
+			}
 		}
 
 		res := d.query(pCtx, q, fqm)

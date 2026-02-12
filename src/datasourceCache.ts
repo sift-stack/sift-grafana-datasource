@@ -10,7 +10,7 @@ import {
   Labels,
   FieldConfig,
 } from '@grafana/data';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable, lastValueFrom } from 'rxjs';
 import { SiftQuery } from './types';
 import { replaceTemplateVariablesInQuery } from './utils';
 
@@ -83,7 +83,7 @@ export class SiftDataSourceCache {
         newIntervalMs !== cacheEntry.fetchedIntervalMs || // new resolution/sample frequency requested
         liveLookbackTime <= newFrom // all data is liveish
       ) {
-        const fullData = await firstValueFrom(fetchCallback(request));
+        const fullData = await lastValueFrom(fetchCallback(request));
 
         // Store in cache
         this.cache.set(panelId, {
@@ -152,7 +152,7 @@ export class SiftDataSourceCache {
             },
           };
 
-          const subResp = await firstValueFrom(fetchCallback(subReq));
+          const subResp = await lastValueFrom(fetchCallback(subReq));
           if (!subResp.errors && subResp.data.length > 0) {
             newFrames.push(subResp.data);
           } else {
@@ -214,7 +214,7 @@ export class SiftDataSourceCache {
       return result;
     } catch (e) {
       console.error(`Panel ${panelId} - Failed to handle cache`, e);
-      return await firstValueFrom(fetchCallback(request));
+      return await lastValueFrom(fetchCallback(request));
     }
   }
 }

@@ -193,19 +193,13 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 			continue
 		}
 
-		// Check if this is an async query (has meta.queryFlow == "async" from the FE library)
-		var meta struct {
-			Meta struct {
-				QueryFlow string `json:"queryFlow"`
-			} `json:"meta"`
-		}
-		_ = json.Unmarshal(q.JSON, &meta)
-
+		// Annotation queries run synchronously; all other data queries go through
+		// the async path so DatasourceWithAsyncBackend can poll for results.
 		var res backend.DataResponse
-		if meta.Meta.QueryFlow == "async" {
-			res = d.handleAsyncQuery(req.PluginContext, q, *fqm)
-		} else {
+		if fqm.AnnotationType != "" {
 			res = d.query(req.PluginContext, q, *fqm)
+		} else {
+			res = d.handleAsyncQuery(req.PluginContext, q, *fqm)
 		}
 		// save the response in a hashmap
 		// based on with RefID as identifier

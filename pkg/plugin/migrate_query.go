@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"net/http"
 	"strings"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 type legacyCalculatedChannelQuery struct {
@@ -40,6 +41,8 @@ type legacyQueryModel struct {
 	RunId                  string                        `json:"runId"`
 	RunName                string                        `json:"runName"`
 	Hide                   bool                          `json:"hide"`
+	AnnotationType         string                        `json:"annotationType"`
+	AnnotationFilter       string                        `json:"annotationFilter"`
 }
 
 // convertQueryIfNeeded checks if the query is in a legacy format and converts it if needed
@@ -119,8 +122,10 @@ func convertLegacyQuery(orig json.RawMessage) (*queryModel, error) {
 	}
 
 	migratedInput := &queryModel{
-		CombineRuns:  !input.GroupByRun,
-		QueryVersion: QueryVersion,
+		CombineRuns:      !input.GroupByRun,
+		QueryVersion:     QueryVersion,
+		AnnotationType:   input.AnnotationType,
+		AnnotationFilter: input.AnnotationFilter,
 	}
 
 	// Map to store unique asset+run combinations to reduce the number of unique SELECT blocks

@@ -1,6 +1,6 @@
 import { SiftDataSource } from './datasource';
 import { getTemplateSrv } from '@grafana/runtime';
-import { SiftQuery, QueryTypes } from './types';
+import { SiftQuery, QueryTypes, QUERY_VERSION } from './types';
 
 // Mock the getTemplateSrv function
 jest.mock('@grafana/runtime', () => ({
@@ -44,6 +44,67 @@ describe('SiftDataSource', () => {
     (getTemplateSrv as jest.Mock).mockReturnValue(mockTemplateSrv);
 
     datasource = new SiftDataSource({} as any);
+  });
+
+  describe('migrateQuery', () => {
+    it('skips migration when queryVersion is current', async () => {
+      const query: Partial<SiftQuery> = {
+        refId: 'Anno',
+        queryVersion: QUERY_VERSION,
+        annotationType: 'annotationsQuery',
+        annotationFilter: "asset_name=='blah'",
+      };
+
+      const result = await datasource.migrateQuery(query);
+
+      expect(datasource.postResource).not.toHaveBeenCalled();
+      expect(result.annotationType).toBe('annotationsQuery');
+      expect(result.annotationFilter).toBe("asset_name=='blah'");
+      expect(result.queryVersion).toBe(QUERY_VERSION);
+    });
+
+    it('triggers backend migration when queryVersion is missing', async () => {
+      const query: Partial<SiftQuery> = {
+        refId: 'Anno',
+        annotationType: 'annotationsQuery',
+        annotationFilter: "asset_name=='blah'",
+      };
+
+      // Backend migration now preserves annotation fields
+      (datasource.postResource as jest.Mock).mockResolvedValue({
+        queryVersion: QUERY_VERSION,
+        combineRuns: true,
+        annotationType: 'annotationsQuery',
+        annotationFilter: "asset_name=='blah'",
+      });
+
+      const result = await datasource.migrateQuery(query);
+
+      expect(datasource.postResource).toHaveBeenCalledWith('migrate-query', query);
+      expect(result.annotationType).toBe('annotationsQuery');
+      expect(result.annotationFilter).toBe("asset_name=='blah'");
+      expect(result.queryVersion).toBe(QUERY_VERSION);
+      expect(result.refId).toBe('Anno');
+    });
+
+    it('triggers backend migration when legacy fields are present', async () => {
+      const query: Partial<SiftQuery> = {
+        refId: 'A',
+        queries: [{ assetId: 'asset123', channelId: 'chan456' }],
+      } as any;
+
+      (datasource.postResource as jest.Mock).mockResolvedValue({
+        queryVersion: QUERY_VERSION,
+        combineRuns: true,
+        channelDataQueries: [{ assetQueries: [{ assetId: 'asset123' }] }],
+      });
+
+      const result = await datasource.migrateQuery(query);
+
+      expect(datasource.postResource).toHaveBeenCalledWith('migrate-query', query);
+      expect(result.queryVersion).toBe(QUERY_VERSION);
+      expect(result.refId).toBe('A');
+    });
   });
 
   describe('applyTemplateVariables', () => {

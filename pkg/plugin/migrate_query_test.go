@@ -422,6 +422,36 @@ func TestConvertQuery(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "annotation query without queryVersion preserves annotation fields through migration",
+			input: `{
+				"refId": "Anno",
+				"annotationType": "annotationsQuery",
+				"annotationFilter": "asset_name=='blah'"
+			}`,
+			needsMigration: true,
+			expected: &queryModel{
+				CombineRuns:      true,
+				QueryVersion:     QueryVersion,
+				AnnotationType:   "annotationsQuery",
+				AnnotationFilter: "asset_name=='blah'",
+			},
+			expectError: false,
+		},
+		{
+			name: "annotation query without queryVersion and empty filter preserves annotationType",
+			input: `{
+				"refId": "Anno",
+				"annotationType": "annotationsQuery"
+			}`,
+			needsMigration: true,
+			expected: &queryModel{
+				CombineRuns:    true,
+				QueryVersion:   QueryVersion,
+				AnnotationType: "annotationsQuery",
+			},
+			expectError: false,
+		},
+		{
 			name:           "invalid json",
 			input:          `{invalid json}`,
 			needsMigration: false,

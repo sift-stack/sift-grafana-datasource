@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
 import { SiftDataSource } from '../datasource';
 import { QueryEditor } from './query-editor/QueryEditor';
-import { QueryTypes } from '../types';
+import { QueryTypes, QUERY_VERSION } from '../types';
 import { OpenInSiftButton } from './sharelink/OpenInSiftButton';
 
 // Mock the QueryEditor component
@@ -543,6 +543,71 @@ describe('VisualSiftQueryEditor', () => {
         }),
         expect.anything()
       );
+    });
+  });
+
+  describe('onChange always includes queryVersion', () => {
+    it('includes queryVersion when channel data queries are updated', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: QUERY_VERSION,
+        channelDataQueries: [],
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mock-query-editor')).toBeInTheDocument();
+      });
+
+      const { onUpdateChannelDataQueries } = (QueryEditor as jest.Mock).mock.calls[0][0];
+      const newChannelDataQueries = [
+        { assetQueries: [{ assetId: 'new-asset' }], channelQueries: [{ channelId: 'new-channel' }] },
+      ];
+      await waitFor(() => onUpdateChannelDataQueries(newChannelDataQueries));
+
+      for (const call of mockOnChange.mock.calls) {
+        expect(call[0]).toHaveProperty('queryVersion', QUERY_VERSION);
+      }
+    });
+
+    it('includes queryVersion when combineRuns is toggled', async () => {
+      const query = {
+        refId: 'A',
+        queryVersion: QUERY_VERSION,
+        channelDataQueries: [],
+        combineRuns: false,
+      };
+
+      mockDatasource.migrateQuery.mockResolvedValue(query);
+
+      render(
+        <VisualSiftQueryEditor
+          query={query as any}
+          onChange={mockOnChange}
+          onRunQuery={mockOnRunQuery}
+          datasource={mockDatasource as unknown as SiftDataSource}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('GROUP BY')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByLabelText('Combine Runs'));
+
+      for (const call of mockOnChange.mock.calls) {
+        expect(call[0]).toHaveProperty('queryVersion', QUERY_VERSION);
+      }
     });
   });
 

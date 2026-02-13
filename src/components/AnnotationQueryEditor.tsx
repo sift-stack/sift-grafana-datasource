@@ -4,6 +4,7 @@ import { GrafanaTheme2, QueryEditorProps } from '@grafana/data';
 import { Icon, InlineField, InlineFieldRow, Input, RadioButtonGroup, Text, TextLink, useStyles2 } from '@grafana/ui';
 import { SiftDataSource } from '../datasource';
 import { AnnotationQueryType, SiftQuery, SiftDataSourceOptions } from '../types';
+import { ensureQueryDefaults } from '../utils';
 import { VisualSiftQueryEditor } from './VisualSiftQueryEditor';
 
 type Props = QueryEditorProps<SiftDataSource, SiftQuery, SiftDataSourceOptions>;
@@ -129,12 +130,12 @@ export const AnnotationQueryEditor = (props: Props) => {
     setAnnotationType(initAnnotationType);
     setAnnotationFilter(query.annotationFilter || '');
 
-    // Ensure query has annotationType set
-    if (!query.annotationType) {
-      onChange({
+    // Ensure query has annotationType and required defaults (e.g. queryVersion) set
+    if (!query.annotationType || !query.queryVersion) {
+      onChange(ensureQueryDefaults({
         ...query,
         annotationType: initAnnotationType,
-      });
+      }) as SiftQuery);
     }
 
     setInitialized(true);
@@ -143,10 +144,10 @@ export const AnnotationQueryEditor = (props: Props) => {
   const onAnnotationTypeChange = useCallback(
     (newAnnotationType: AnnotationQueryType) => {
       setAnnotationType(newAnnotationType);
-      onChange({
+      onChange(ensureQueryDefaults({
         ...query,
         annotationType: newAnnotationType,
-      });
+      }) as SiftQuery);
       onRunQuery();
     },
     [query, onChange, onRunQuery]
@@ -155,10 +156,10 @@ export const AnnotationQueryEditor = (props: Props) => {
   // Wrap onChange to always include annotationType
   const onChangeWithAnnotationType = useCallback(
     (updatedQuery: SiftQuery) => {
-      onChange({
+      onChange(ensureQueryDefaults({
         ...updatedQuery,
         annotationType,
-      });
+      }) as SiftQuery);
     },
     [onChange, annotationType]
   );
@@ -168,11 +169,11 @@ export const AnnotationQueryEditor = (props: Props) => {
   }, []);
 
   const onAnnotationFilterBlur = useCallback(() => {
-    onChange({
+    onChange(ensureQueryDefaults({
       ...query,
       annotationType,
       annotationFilter,
-    });
+    }) as SiftQuery);
     onRunQuery();
   }, [query, onChange, onRunQuery, annotationType, annotationFilter]);
 

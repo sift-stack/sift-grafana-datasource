@@ -69,11 +69,11 @@ func StringFromChannelSearchKey(c channelSearchKey) string {
 	return fmt.Sprintf("[%s] %s", c.assetId, c.searchTerm)
 }
 
-// siftApiTimeout is the HTTP client timeout for requests from the plugin to the Sift API.
-// Long-running data queries (e.g. large time ranges) can take multiple minutes before Sift returns
-// the first byte; without this override the default client timeout causes "timeout awaiting
-// response headers" and failed panels.
-const siftApiTimeout = 5 * time.Minute
+// defaultSiftApiTimeout is the default HTTP client timeout for requests from the plugin to the Sift API
+// when the datasource does not set a custom value (queryTimeoutSeconds). Long-running data queries
+// can take multiple minutes before Sift returns the first byte; without an override the default client
+// timeout causes "timeout awaiting response headers" and failed panels.
+const defaultSiftApiTimeout = 5 * time.Minute
 
 // NewSiftDatasource creates a new datasource instance.
 func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
@@ -87,7 +87,10 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 	if opts.Timeouts == nil {
 		opts.Timeouts = &httpclient.TimeoutOptions{}
 	}
-	opts.Timeouts.Timeout = siftApiTimeout
+	opts.Timeouts.Timeout = defaultSiftApiTimeout
+	if sec := getQueryTimeoutSeconds(s.JSONData); sec > 0 {
+		opts.Timeouts.Timeout = time.Duration(sec) * time.Second
+	}
 
 	httpClient, err := httpclient.New(opts)
 	if err != nil {
@@ -208,8 +211,9 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 }
 
 type jsonData struct {
-	Url         string `json:"url"`
-	FrontendUrl string `json:"frontendUrl"`
+	Url                 string `json:"url"`
+	FrontendUrl         string `json:"frontendUrl"`
+	QueryTimeoutSeconds int    `json:"queryTimeoutSeconds"`
 }
 
 type commonQueryProperties struct {
@@ -384,6 +388,17 @@ type calculatedChannelKey struct {
 type channelSearchKey struct {
 	assetId    string
 	searchTerm string
+}
+
+func getQueryTimeoutSeconds(jsonDataBytes []byte) int {
+	var jd jsonData
+	if err := json.Unmarshal(jsonDataBytes, &jd); err != nil {
+		return 0
+	}
+	if jd.QueryTimeoutSeconds <= 0 {
+		return 0
+	}
+	return jd.QueryTimeoutSeconds
 }
 
 func getApiUrl(dataSourceInstanceSettings *backend.DataSourceInstanceSettings) (*url.URL, error) {

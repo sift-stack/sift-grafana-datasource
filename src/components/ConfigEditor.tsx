@@ -24,6 +24,18 @@ export function ConfigEditor(props: Props) {
     onOptionsChange({ ...options, jsonData });
   };
 
+  const onQueryTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const raw = event.target.value.trim();
+    const parsed = raw === '' ? undefined : parseInt(raw, 10);
+    const queryTimeoutSeconds =
+      parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined;
+    const jsonData = {
+      ...options.jsonData,
+      queryTimeoutSeconds,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   // Secure field (only sent to the backend)
   const onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({
@@ -84,6 +96,24 @@ export function ConfigEditor(props: Props) {
           value={jsonData.frontendUrl || ''}
           placeholder="Sift frontend URL (optional)"
           width={40}
+        />
+      </InlineField>
+      <InlineField
+        label="Query timeout (s)"
+        labelWidth={20}
+        tooltip="Max seconds to wait for the Sift API per request. Leaving blank will use the default (300 seconds)."
+      >
+        <Input
+          type="number"
+          min={1}
+          onChange={onQueryTimeoutChange}
+          value={
+            jsonData.queryTimeoutSeconds != null && jsonData.queryTimeoutSeconds > 0
+              ? String(jsonData.queryTimeoutSeconds)
+              : ''
+          }
+          placeholder="300"
+          width={20}
         />
       </InlineField>
     </Stack>

@@ -69,6 +69,12 @@ func StringFromChannelSearchKey(c channelSearchKey) string {
 	return fmt.Sprintf("[%s] %s", c.assetId, c.searchTerm)
 }
 
+// siftApiTimeout is the HTTP client timeout for requests from the plugin to the Sift API.
+// Long-running data queries (e.g. large time ranges) can take multiple minutes before Sift returns
+// the first byte; without this override the default client timeout causes "timeout awaiting
+// response headers" and failed panels.
+const siftApiTimeout = 5 * time.Minute
+
 // NewSiftDatasource creates a new datasource instance.
 func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	// Initialize http client
@@ -76,6 +82,12 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 	if err != nil {
 		return nil, err
 	}
+	// Override timeout for outbound calls to Sift so long queries
+	// do not fail with "Client.Timeout exceeded while awaiting headers".
+	if opts.Timeouts == nil {
+		opts.Timeouts = &httpclient.TimeoutOptions{}
+	}
+	opts.Timeouts.Timeout = siftApiTimeout
 
 	httpClient, err := httpclient.New(opts)
 	if err != nil {

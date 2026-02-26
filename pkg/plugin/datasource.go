@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -186,7 +187,7 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 			continue
 		}
 
-		res := d.query(req.PluginContext, q, *fqm)
+		res := d.query(ctx, req.PluginContext, q, *fqm)
 		// save the response in a hashmap
 		// based on with RefID as identifier
 		response.Responses[q.RefID] = res
@@ -388,7 +389,7 @@ func getApiUrl(dataSourceInstanceSettings *backend.DataSourceInstanceSettings) (
 	return u, nil
 }
 
-func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
+func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
 	defer func() {
 		if err := recover(); err != nil {
 			log.DefaultLogger.Error("recovered from panic", "error", err)
@@ -397,20 +398,26 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 
 	// Route annotationsQuery to the Sift annotations API
 	if fqm.AnnotationType == "annotationsQuery" {
-		return d.querySiftAnnotations(pCtx, query, fqm)
+		return d.querySiftAnnotations(ctx, pCtx, query, fqm)
 	}
 
 	var response backend.DataResponse
 
 	queryStart := time.Now()
-	queries, calculatedChannelKeys, err := generateQueries(pCtx, fqm, d)
+	queries, calculatedChannelKeys, err := generateQueries(ctx, pCtx, fqm, d)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating queries: %v", err.Error()))
 	}
 	afterLoadingQueries := time.Now()
 
-	responseData, err := runDataQueries(pCtx, queries, query, d)
+	responseData, err := runDataQueries(ctx, pCtx, queries, query, d)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
 	}
 	afterExecutingQueries := time.Now()
@@ -446,7 +453,7 @@ func (d *SiftDatasource) query(pCtx backend.PluginContext, query backend.DataQue
 // - A slice of query objects that can be sent to the backend API
 // - A map of calculated channel keys to their metadata (for calculated channels only)
 // - Any error that occurred during query generation
-func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasource) ([]siftApiGetDataSubQuery, map[string]calculatedChannelKey, error) {
+func generateQueries(ctx context.Context, pCtx backend.PluginContext, fqm queryModel, d *SiftDatasource) ([]siftApiGetDataSubQuery, map[string]calculatedChannelKey, error) {
 	queries := []siftApiGetDataSubQuery{}
 	calculatedChannelKeys := make(map[string]calculatedChannelKey)
 
@@ -460,14 +467,14 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 			if assetQuery.AssetId != "" {
 				assetIdQueries = append(assetIdQueries, assetQuery.AssetId)
 			} else if assetQuery.AssetName != "" {
-				foundAssetIds, err := d.getAssetIdsByName(pCtx, assetQuery.AssetName, assetQuery.NameAsRegex)
+				foundAssetIds, err := d.getAssetIdsByName(ctx, pCtx, assetQuery.AssetName, assetQuery.NameAsRegex)
 				if err != nil {
 					return nil, nil, fmt.Errorf("error looking up assets: %w", err)
 				}
 				assetIds = append(assetIds, foundAssetIds...)
 			}
 		}
-		validAssetIds, err := d.getValidAssetsById(pCtx, assetIdQueries)
+		validAssetIds, err := d.getValidAssetsById(ctx, pCtx, assetIdQueries)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error looking up assets: %w", err)
 		}
@@ -484,28 +491,28 @@ func generateQueries(pCtx backend.PluginContext, fqm queryModel, d *SiftDatasour
 			if runQuery.RunId != "" {
 				runIdQueries = append(runIdQueries, runQuery.RunId)
 			} else if runQuery.RunName != "" {
-				foundRunIds, err := d.getRunIdsByName(pCtx, assetIds, runQuery.RunName, runQuery.NameAsRegex)
+				foundRunIds, err := d.getRunIdsByName(ctx, pCtx, assetIds, runQuery.RunName, runQuery.NameAsRegex)
 				if err != nil {
 					return nil, nil, fmt.Errorf("error looking up runs: %w", err)
 				}
 				runIds = append(runIds, foundRunIds...)
 			}
 		}
-		validRunIds, err := d.getValidRunsById(pCtx, runIdQueries)
+		validRunIds, err := d.getValidRunsById(ctx, pCtx, runIdQueries)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error looking up runs: %w", err)
 		}
 		runIds = append(runIds, validRunIds...)
 
 		// Process regular channel queries
-		channelQueries, err := getChannelQueries(pCtx, cdq, runIds, assetIds, d)
+		channelQueries, err := getChannelQueries(ctx, pCtx, cdq, runIds, assetIds, d)
 		if err != nil {
 			return nil, nil, err
 		}
 		queries = append(queries, channelQueries...)
 
 		//Process calculated channel queries
-		calculationQueries, calculatedChanKeys, err := getCalculationQueries(pCtx, cdq, runIds, assetIds, fqm, d)
+		calculationQueries, calculatedChanKeys, err := getCalculationQueries(ctx, pCtx, cdq, runIds, assetIds, fqm, d)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -546,18 +553,18 @@ func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGe
 	return chunks
 }
 
-func runDataQueries(pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, d *SiftDatasource) ([]queryResponseData, error) {
+func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, d *SiftDatasource) ([]queryResponseData, error) {
 	chunks := splitQueries(queries, (len(queries)+maxParallelDataQueries-1)/maxParallelDataQueries)
 
 	var allData []queryResponseData
 	var mu sync.Mutex
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, _ := errgroup.WithContext(ctx)
 	g.SetLimit(maxParallelDataQueries)
 	for _, chunk := range chunks {
 		chunk := chunk
 		g.Go(func() error {
-			dataResponse, err := d.getData(pCtx, chunk, query)
+			dataResponse, err := d.getData(ctx, pCtx, chunk, query)
 			if err != nil {
 				return err
 			}
@@ -1197,11 +1204,14 @@ func generateAnnotationFrame(responseData []queryResponseData, calculatedChannel
 
 // querySiftAnnotations handles the annotationsQuery type by calling the Sift annotations API
 // and converting the response into a Grafana-compatible annotation data frame.
-func (d *SiftDatasource) querySiftAnnotations(pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
+func (d *SiftDatasource) querySiftAnnotations(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
 	var response backend.DataResponse
 
-	annotations, err := d.listSiftAnnotations(pCtx, query, fqm.AnnotationFilter)
+	annotations, err := d.listSiftAnnotations(ctx, pCtx, query, fqm.AnnotationFilter)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error listing Sift annotations: %v", err.Error()))
 	}
 
@@ -1394,7 +1404,7 @@ func checkInt64PrecisionLoss(frame *data.Frame) {
 	}
 }
 
-func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds []string, assetIds []string, d *SiftDatasource) ([]siftApiGetDataSubQuery, error) {
+func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq channelDataQuery, runIds []string, assetIds []string, d *SiftDatasource) ([]siftApiGetDataSubQuery, error) {
 	queries := []siftApiGetDataSubQuery{}
 	if cdq.ChannelQueries == nil {
 		return queries, nil
@@ -1429,7 +1439,7 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 					})
 				}
 			}
-			resultsExact, err := parallelSearchChannels(d, pCtx, channelNameExactSearches, 10, d.channelsNameSearchCache)
+			resultsExact, err := parallelSearchChannels(ctx, d, pCtx, channelNameExactSearches, 10, d.channelsNameSearchCache)
 			if err != nil {
 				return nil, fmt.Errorf("error looking up exact channels: %w", err)
 			}
@@ -1441,7 +1451,7 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 					}
 				}
 			}
-			resultsRegex, err := parallelSearchChannels(d, pCtx, channelNameRegexSearches, 10, d.channelsRegexSearchCache)
+			resultsRegex, err := parallelSearchChannels(ctx, d, pCtx, channelNameRegexSearches, 10, d.channelsRegexSearchCache)
 			if err != nil {
 				return nil, fmt.Errorf("error looking up regex channels: %w", err)
 			}
@@ -1456,7 +1466,7 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 		}
 	}
 
-	results, err := d.getChannelsById(pCtx, channelIdQueries)
+	results, err := d.getChannelsById(ctx, pCtx, channelIdQueries)
 	if err != nil {
 		return nil, fmt.Errorf("error looking up channels: %w", err)
 	}
@@ -1493,7 +1503,7 @@ func getChannelQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds 
 	return queries, nil
 }
 
-func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, runIds []string, assetIds []string, fqm queryModel, d *SiftDatasource) ([]siftApiGetDataSubQuery, map[string]calculatedChannelKey, error) {
+func getCalculationQueries(ctx context.Context, pCtx backend.PluginContext, cdq channelDataQuery, runIds []string, assetIds []string, fqm queryModel, d *SiftDatasource) ([]siftApiGetDataSubQuery, map[string]calculatedChannelKey, error) {
 	queries := []siftApiGetDataSubQuery{}
 	calculatedChannelKeys := map[string]calculatedChannelKey{}
 	if cdq.CalculatedChannelQueries == nil {
@@ -1521,7 +1531,7 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 				if channelRef.ChannelId != "" {
 					var results []Channel
 					var err error
-					results, err = d.getChannelsById(pCtx, []string{channelRef.ChannelId})
+					results, err = d.getChannelsById(ctx, pCtx, []string{channelRef.ChannelId})
 					if err != nil {
 						return nil, nil, fmt.Errorf("error looking up channels: %w", err)
 					}
@@ -1542,9 +1552,9 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 					var channels []Channel
 					var err error
 					if channelRef.NameAsRegex {
-						channels, err = d.channelsRegexSearchCache.GetOrWait(d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
+						channels, err = d.channelsRegexSearchCache.GetOrWait(ctx, d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
 					} else {
-						channels, err = d.channelsNameSearchCache.GetOrWait(d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
+						channels, err = d.channelsNameSearchCache.GetOrWait(ctx, d, pCtx, channelSearchKey{assetId: assetId, searchTerm: channelRef.ChannelName})
 					}
 
 					if err != nil || channels == nil {
@@ -1686,13 +1696,14 @@ func getCalculationQueries(pCtx backend.PluginContext, cdq channelDataQuery, run
 }
 
 func parallelSearchChannels(
+	ctx context.Context,
 	d *SiftDatasource,
 	pCtx backend.PluginContext,
 	channelSearchKeys []channelSearchKey,
 	maxParallel int,
 	cacheWithLoader *TypedCacheWithLoader[channelSearchKey, []Channel, string],
 ) (map[channelSearchKey][]Channel, error) {
-	g, _ := errgroup.WithContext(context.Background())
+	g, _ := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, maxParallel)
 	results := make(map[channelSearchKey][]Channel)
 	mu := sync.Mutex{}
@@ -1702,7 +1713,7 @@ func parallelSearchChannels(
 		g.Go(func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := cacheWithLoader.GetOrWait(d, pCtx, key)
+			result, err := cacheWithLoader.GetOrWait(ctx, d, pCtx, key)
 			if err != nil {
 				return err
 			}

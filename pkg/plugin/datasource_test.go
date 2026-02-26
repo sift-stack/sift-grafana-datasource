@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -1836,7 +1837,7 @@ func (s *DatasourceTestSuite) TestGenerateQueries() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			queries, channelKeys, err := generateQueries(s.pCtx, tc.input, s.datasource)
+			queries, channelKeys, err := generateQueries(context.Background(), s.pCtx, tc.input, s.datasource)
 
 			if tc.expectedError != "" {
 				s.Error(err)

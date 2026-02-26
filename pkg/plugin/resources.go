@@ -34,7 +34,7 @@ func (d *SiftDatasource) callResourceAssets(ctx context.Context, req *backend.Ca
 		}
 	}
 
-	assets, err := handlePaginatedRequest[Asset](d, apiRequest{
+	assets, err := handlePaginatedRequest[Asset](ctx, d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v1/assets",
@@ -70,7 +70,7 @@ func (d *SiftDatasource) callResourceRuns(ctx context.Context, req *backend.Call
 		return err
 	}
 
-	runs, err := handlePaginatedRequest[Run](d, apiRequest{
+	runs, err := handlePaginatedRequest[Run](ctx, d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v2/runs",
@@ -122,7 +122,7 @@ func (d *SiftDatasource) callResourceChannels(ctx context.Context, req *backend.
 
 	params.Set("page_size", strconv.Itoa(ResourceLimit))
 
-	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
+	channels, err := handlePaginatedRequest[Channel](ctx, d, apiRequest{
 		pCtx:        req.PluginContext,
 		method:      "GET",
 		path:        "/api/v1/channels:search", // internal API endpoint used here for improved regex search performance
@@ -188,7 +188,7 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 		})
 	}
 
-	queries, calculatedKeys, err := generateQueries(req.PluginContext, *queryModel, d)
+	queries, calculatedKeys, err := generateQueries(ctx, req.PluginContext, *queryModel, d)
 	if err != nil {
 		log.DefaultLogger.Error("resolveQueryToSiftMetadata generateQueries error", "error", err)
 		return sender.Send(&backend.CallResourceResponse{
@@ -273,7 +273,7 @@ func (d *SiftDatasource) resolveQueryToSiftMetadata(ctx context.Context, req *ba
 	}
 
 	if len(channelIDs) > 0 {
-		channels, err := d.getChannelsById(req.PluginContext, channelIDs)
+		channels, err := d.getChannelsById(ctx, req.PluginContext, channelIDs)
 		if err != nil {
 			log.DefaultLogger.Error("resolveQueryToSiftMetadata channel lookup error", "error", err)
 			return sender.Send(&backend.CallResourceResponse{

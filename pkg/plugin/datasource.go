@@ -559,12 +559,14 @@ func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []s
 	var allData []queryResponseData
 	var mu sync.Mutex
 
-	g, _ := errgroup.WithContext(ctx)
+	// We pass the error group context to allow us to fail fast if any of the chunks fail
+	// versus waiting for all chunks to complete and then returning the error.
+	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(maxParallelDataQueries)
 	for _, chunk := range chunks {
 		chunk := chunk
 		g.Go(func() error {
-			dataResponse, err := d.getData(ctx, pCtx, chunk, query)
+			dataResponse, err := d.getData(gCtx, pCtx, chunk, query)
 			if err != nil {
 				return err
 			}
@@ -1703,7 +1705,9 @@ func parallelSearchChannels(
 	maxParallel int,
 	cacheWithLoader *TypedCacheWithLoader[channelSearchKey, []Channel, string],
 ) (map[channelSearchKey][]Channel, error) {
-	g, _ := errgroup.WithContext(ctx)
+	// We pass the error group context to allow us to fail fast if any of the chunks fail
+	// versus waiting for all chunks to complete and then returning the error.
+	g, gCtx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, maxParallel)
 	results := make(map[channelSearchKey][]Channel)
 	mu := sync.Mutex{}
@@ -1713,7 +1717,7 @@ func parallelSearchChannels(
 		g.Go(func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := cacheWithLoader.GetOrWait(ctx, d, pCtx, key)
+			result, err := cacheWithLoader.GetOrWait(gCtx, d, pCtx, key)
 			if err != nil {
 				return err
 			}

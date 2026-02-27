@@ -1,6 +1,7 @@
 name: CI
 permissions:
   contents: read
+  pull-requests: write
 
 on:
   push:
@@ -118,12 +119,84 @@ jobs:
             grafana/plugin-validator-cli -analyzer=metadatavalid /archive.zip
 
       - name: Validate plugin
+        id: validate
         continue-on-error: true
         run: |
-          npx -y @grafana/plugin-validator@latest -sourceCodeUri file://./ $PLUGIN_ARCHIVE
+          set -o pipefail
+          npx -y @grafana/plugin-validator@latest -sourceCodeUri file://./ $PLUGIN_ARCHIVE 2>&1 | tee validate-output.txt
         shell: bash
         env:
           PLUGIN_ARCHIVE: ${{ steps.metadata.outputs.archive }}
+
+      - name: Post validation results as PR comment
+        if: steps.validate.outcome == 'failure' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('validate-output.txt', 'utf8');
+            const filtered = raw
+              .split('\n')
+              .filter(l => /^(error|warning|detail|recommendation):/.test(l))
+              .join('\n');
+
+            const body = [
+              '## :warning: Plugin Validation Failed',
+              '',
+              'Validation issues were found. These **will not block merging** but must be resolved before publishing to the Grafana plugin catalog.',
+              '',
+              '<details>',
+              '<summary>Validation output</summary>',
+              '',
+              '```',
+              filtered,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes('Plugin Validation Failed'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Write validation summary
+        if: steps.validate.outcome == 'failure'
+        shell: bash
+        run: |
+          filtered=$(grep -E '^(error|warning|detail|recommendation):' validate-output.txt || true)
+          {
+            echo "## :warning: Plugin Validation Failed"
+            echo ""
+            echo "Validation issues were found. These will not block merging but must be resolved before publishing to the Grafana plugin catalog."
+            echo ""
+            echo "<details>"
+            echo "<summary>Validation output</summary>"
+            echo ""
+            echo '```'
+            echo "$filtered"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Archive Build
         uses: actions/upload-artifact@v4

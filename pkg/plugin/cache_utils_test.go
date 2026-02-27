@@ -304,3 +304,72 @@ func TestTypedCacheWithLoader_GetOrWait_WithComplexTypes(t *testing.T) {
 		t.Errorf("Expected cached data 'complex-data-asset123', got %s", cachedValue.Data)
 	}
 }
+
+// TestTypedCacheWithLoader_GetOrWait_FirstCallerCancelled verifies that when the first caller's
+// context is cancelled, the loader still completes successfully, and other concurrent calls (with uncancelled contexts)
+// receive the loaded value instead of a context.Canceled error.
+func TestTypedCacheWithLoader_GetOrWait_FirstCallerCancelled(t *testing.T) {
+	cache := NewTypedCache[string, string](1*time.Minute, 1*time.Minute)
+
+	// Loader runs long enough that we can cancel the first caller's context mid-load.
+	loadDuration := 100 * time.Millisecond
+	loader := func(ctx context.Context, d *SiftDatasource, pCtx backend.PluginContext, key string) (string, error) {
+		select {
+		case <-time.After(loadDuration):
+			return "loaded-value", nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+
+	cacheWithLoader := NewTypedCacheWithLoader(cache, loader, func(k string) string { return k })
+	mockDatasource := &SiftDatasource{}
+	mockContext := backend.PluginContext{}
+
+	ctxFirst, cancelFirst := context.WithCancel(context.Background())
+	defer cancelFirst()
+
+	var wg sync.WaitGroup
+	results := make([]string, 3)
+	errs := make([]error, 3)
+
+	// First caller: will enter sync.OnceValues() and load the value. We cancel its context shortly after.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[0], errs[0] = cacheWithLoader.GetOrWait(ctxFirst, mockDatasource, mockContext, "test-key")
+	}()
+
+	// Give the first caller time to enter sync.OnceValues()
+	time.Sleep(10 * time.Millisecond)
+
+	// Second and third callers: wait on sync.OnceValues(). Use separate new contexts which we don't cancel
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[1], errs[1] = cacheWithLoader.GetOrWait(context.Background(), mockDatasource, mockContext, "test-key")
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[2], errs[2] = cacheWithLoader.GetOrWait(context.Background(), mockDatasource, mockContext, "test-key")
+	}()
+
+	// Give the second and third callers time to wait on sync.OnceValues()
+	// Then cancel the first caller's context while loading is occuring
+	time.Sleep(10 * time.Millisecond)
+	cancelFirst()
+
+	wg.Wait()
+
+	// Without using WithoutCancel, the loader would see the cancelled context and return context.Canceled.
+	// This would propegate to all callers. Using WithoutCancel: the loader still completes and all callers get the value.
+	for i := 0; i < 3; i++ {
+		if errs[i] != nil {
+			t.Errorf("caller %d: expected no error, got %v", i, errs[i])
+		}
+		if results[i] != "loaded-value" {
+			t.Errorf("caller %d: expected loaded-value, got %q", i, results[i])
+		}
+	}
+}

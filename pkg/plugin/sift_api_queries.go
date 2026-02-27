@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -126,7 +127,10 @@ type siftApiGetDataQuery struct {
 	PageToken *string                  `json:"pageToken,omitempty"`
 }
 
-func (d *SiftDatasource) executeRequest(req apiRequest) ([]byte, error) {
+func (d *SiftDatasource) executeRequest(ctx context.Context, req apiRequest) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	apiKey := req.pCtx.DataSourceInstanceSettings.DecryptedSecureJSONData["apiKey"]
 
 	u, err := getApiUrl(req.pCtx.DataSourceInstanceSettings)
@@ -148,7 +152,7 @@ func (d *SiftDatasource) executeRequest(req apiRequest) ([]byte, error) {
 		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
-	httpReq, err := http.NewRequest(req.method, u.String(), bodyReader)
+	httpReq, err := http.NewRequestWithContext(ctx, req.method, u.String(), bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
@@ -180,11 +184,12 @@ func (d *SiftDatasource) executeRequest(req apiRequest) ([]byte, error) {
 }
 
 func handleRequest[T any](
+	ctx context.Context,
 	d *SiftDatasource,
 	req apiRequest,
 	unmarshal func(respBody []byte) (items []T, nextPageToken string, err error),
 ) (items []T, nextPageToken string, err error) {
-	respBody, err := d.executeRequest(req)
+	respBody, err := d.executeRequest(ctx, req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -198,6 +203,7 @@ func handleRequest[T any](
 }
 
 func handlePaginatedRequest[T any](
+	ctx context.Context,
 	d *SiftDatasource,
 	req apiRequest,
 	pageSize int,
@@ -210,7 +216,10 @@ func handlePaginatedRequest[T any](
 	params.Set("page_size", strconv.Itoa(pageSize))
 
 	for i := 0; i < maxPages; i++ {
-		items, nextPageToken, err := handleRequest[T](d, req, unmarshal)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		items, nextPageToken, err := handleRequest[T](ctx, d, req, unmarshal)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +235,7 @@ func handlePaginatedRequest[T any](
 
 	return results, nil
 }
-func (d *SiftDatasource) listSiftAnnotations(pCtx backend.PluginContext, query backend.DataQuery, filter string) ([]SiftAnnotation, error) {
+func (d *SiftDatasource) listSiftAnnotations(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, filter string) ([]SiftAnnotation, error) {
 	params := url.Values{}
 
 	// Build time filter using CEL
@@ -240,7 +249,7 @@ func (d *SiftDatasource) listSiftAnnotations(pCtx backend.PluginContext, query b
 		params.Set("filter", timeFilter)
 	}
 
-	annotations, err := handlePaginatedRequest[SiftAnnotation](d, apiRequest{
+	annotations, err := handlePaginatedRequest[SiftAnnotation](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v1/annotations",
@@ -260,7 +269,7 @@ func (d *SiftDatasource) listSiftAnnotations(pCtx backend.PluginContext, query b
 	return annotations, nil
 }
 
-func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftApiGetDataSubQuery, query backend.DataQuery) ([]queryResponseData, error) {
+func (d *SiftDatasource) getData(ctx context.Context, pCtx backend.PluginContext, subQueries []siftApiGetDataSubQuery, query backend.DataQuery) ([]queryResponseData, error) {
 	backendQuery := siftApiGetDataQuery{
 		Queries:   subQueries,
 		StartTime: query.TimeRange.From.Format(time.RFC3339Nano),
@@ -271,6 +280,9 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 
 	var responseData []queryResponseData
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		req := apiRequest{
 			pCtx:   pCtx,
 			method: "POST",
@@ -278,7 +290,7 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 			body:   backendQuery,
 		}
 
-		respBody, err := d.executeRequest(req)
+		respBody, err := d.executeRequest(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -302,7 +314,7 @@ func (d *SiftDatasource) getData(pCtx backend.PluginContext, subQueries []siftAp
 	return responseData, nil
 }
 
-func (d *SiftDatasource) getValidAssetsById(pCtx backend.PluginContext, assetIds []string) ([]string, error) {
+func (d *SiftDatasource) getValidAssetsById(ctx context.Context, pCtx backend.PluginContext, assetIds []string) ([]string, error) {
 	// TODO: client key support once backend supports it
 	startTime := time.Now()
 
@@ -326,7 +338,7 @@ func (d *SiftDatasource) getValidAssetsById(pCtx backend.PluginContext, assetIds
 	assetFilter := celUtils.In("asset_id", assetIdsToSearch)
 	params.Set("filter", assetFilter)
 
-	assets, err := handlePaginatedRequest[Asset](d, apiRequest{
+	assets, err := handlePaginatedRequest[Asset](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v1/assets",
@@ -360,7 +372,7 @@ func (d *SiftDatasource) getValidAssetsById(pCtx backend.PluginContext, assetIds
 	return validAssetIds, nil
 }
 
-func (d *SiftDatasource) getAssetIdsByName(pCtx backend.PluginContext, assetName string, asRegex bool) ([]string, error) {
+func (d *SiftDatasource) getAssetIdsByName(ctx context.Context, pCtx backend.PluginContext, assetName string, asRegex bool) ([]string, error) {
 	startTime := time.Now()
 
 	if asRegex {
@@ -384,7 +396,7 @@ func (d *SiftDatasource) getAssetIdsByName(pCtx backend.PluginContext, assetName
 	}
 	params.Set("filter", assetFilter)
 
-	assets, err := handlePaginatedRequest[Asset](d, apiRequest{
+	assets, err := handlePaginatedRequest[Asset](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v1/assets",
@@ -424,7 +436,7 @@ func (d *SiftDatasource) getAssetIdsByName(pCtx backend.PluginContext, assetName
 	return assetIds, nil
 }
 
-func (d *SiftDatasource) getValidRunsById(pCtx backend.PluginContext, runIdOrClientKeys []string) ([]string, error) {
+func (d *SiftDatasource) getValidRunsById(ctx context.Context, pCtx backend.PluginContext, runIdOrClientKeys []string) ([]string, error) {
 	startTime := time.Now()
 
 	cachedRunIds := []string{}
@@ -447,7 +459,7 @@ func (d *SiftDatasource) getValidRunsById(pCtx backend.PluginContext, runIdOrCli
 	runFilter := celUtils.Or(celUtils.In("client_key", runIdOrClientKeysToSearch), celUtils.In("run_id", runIdOrClientKeysToSearch))
 	params.Set("filter", runFilter)
 
-	runs, err := handlePaginatedRequest[Run](d, apiRequest{
+	runs, err := handlePaginatedRequest[Run](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v2/runs",
@@ -480,7 +492,7 @@ func (d *SiftDatasource) getValidRunsById(pCtx backend.PluginContext, runIdOrCli
 	return validRunIds, nil
 }
 
-func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []string, runName string, asRegex bool) ([]string, error) {
+func (d *SiftDatasource) getRunIdsByName(ctx context.Context, pCtx backend.PluginContext, assetIds []string, runName string, asRegex bool) ([]string, error) {
 	startTime := time.Now()
 
 	if asRegex {
@@ -504,7 +516,7 @@ func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []
 	}
 	params.Set("filter", runFilter)
 
-	runs, err := handlePaginatedRequest[Run](d, apiRequest{
+	runs, err := handlePaginatedRequest[Run](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v2/runs",
@@ -540,7 +552,7 @@ func (d *SiftDatasource) getRunIdsByName(pCtx backend.PluginContext, assetIds []
 	return runIds, nil
 }
 
-func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds []string) ([]Channel, error) {
+func (d *SiftDatasource) getChannelsById(ctx context.Context, pCtx backend.PluginContext, channelIds []string) ([]Channel, error) {
 	startTime := time.Now()
 
 	cachedChannels := []Channel{}
@@ -563,7 +575,7 @@ func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds 
 	channelFilter := celUtils.In("channel_id", channelIdsToSearch)
 	params.Set("filter", channelFilter)
 
-	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
+	channels, err := handlePaginatedRequest[Channel](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v3/channels",
@@ -595,7 +607,7 @@ func (d *SiftDatasource) getChannelsById(pCtx backend.PluginContext, channelIds 
 }
 
 // getChannelsByNameSearch - search for channels by regex query. Does not use cache and is intended to be used by the TypedCacheWithLoader
-func getChannelsByNameSearch(d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
+func getChannelsByNameSearch(ctx context.Context, d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
 	startTime := time.Now()
 
 	params := url.Values{}
@@ -604,7 +616,7 @@ func getChannelsByNameSearch(d *SiftDatasource, pCtx backend.PluginContext, quer
 	params.Set("assetIds", query.assetId)
 	params.Set("searchTerm", query.searchTerm)
 
-	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
+	channels, err := handlePaginatedRequest[Channel](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v1/channels:search", // internal API endpoint used here for improved regex search performance
@@ -635,14 +647,14 @@ func getChannelsByNameSearch(d *SiftDatasource, pCtx backend.PluginContext, quer
 }
 
 // getChannelsByNameExact - search for channels by exact name query. Does not use cache and is intended to be used by the TypedCacheWithLoader
-func getChannelsByNameExact(d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
+func getChannelsByNameExact(ctx context.Context, d *SiftDatasource, pCtx backend.PluginContext, query channelSearchKey) ([]Channel, error) {
 	startTime := time.Now()
 
 	params := url.Values{}
 	channelFilter := celUtils.And(celUtils.Equals("asset_id", query.assetId), celUtils.Equals("name", query.searchTerm))
 	params.Set("filter", channelFilter)
 
-	channels, err := handlePaginatedRequest[Channel](d, apiRequest{
+	channels, err := handlePaginatedRequest[Channel](ctx, d, apiRequest{
 		pCtx:        pCtx,
 		method:      "GET",
 		path:        "/api/v3/channels",

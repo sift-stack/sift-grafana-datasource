@@ -1,13 +1,15 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/patrickmn/go-cache"
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/patrickmn/go-cache"
 )
 
 // TypedCache is a type-safe wrapper around go-cache
@@ -79,10 +81,10 @@ type TypedCacheWithLoader[K any, V any, C comparable] struct {
 	mu              *sync.Mutex
 	keyToComparable func(K) C
 	loading         map[C]func() (V, error)
-	loader          func(*SiftDatasource, backend.PluginContext, K) (V, error)
+	loader          func(context.Context, *SiftDatasource, backend.PluginContext, K) (V, error)
 }
 
-func NewTypedCacheWithLoader[K any, V any, C comparable](typedCache *TypedCache[C, V], loader func(*SiftDatasource, backend.PluginContext, K) (V, error), keyToComparable func(K) C) *TypedCacheWithLoader[K, V, C] {
+func NewTypedCacheWithLoader[K any, V any, C comparable](typedCache *TypedCache[C, V], loader func(context.Context, *SiftDatasource, backend.PluginContext, K) (V, error), keyToComparable func(K) C) *TypedCacheWithLoader[K, V, C] {
 	return &TypedCacheWithLoader[K, V, C]{
 		TypedCache:      typedCache,
 		mu:              &sync.Mutex{},
@@ -93,7 +95,7 @@ func NewTypedCacheWithLoader[K any, V any, C comparable](typedCache *TypedCache[
 }
 
 // GetOrWait retrieves an item from the cache and waits on any other goroutine that is setting the value
-func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backend.PluginContext, key K) (V, error) {
+func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(ctx context.Context, d *SiftDatasource, pCtx backend.PluginContext, key K) (V, error) {
 	tc.mu.Lock()
 	comparableKey := tc.keyToComparable(key)
 	value, found := tc.cache.Get(fmt.Sprintf("%v", comparableKey))
@@ -115,7 +117,10 @@ func (tc *TypedCacheWithLoader[K, V, C]) GetOrWait(d *SiftDatasource, ctx backen
 	// Haven't started loading it
 	log.DefaultLogger.Debug("initiating new cache load", "key", comparableKey)
 	load = sync.OnceValues(func() (V, error) {
-		v, err := tc.loader(d, ctx, key)
+		// We pass context.WithoutCancel to the loader to avoid a scenario where the first caller's request is cancelled,
+		// causing the loader to run with a cancelled context. This would store the error and return it to all concurrent
+		// waiters, even those whose own contexts are still live.
+		v, err := tc.loader(context.WithoutCancel(ctx), d, pCtx, key)
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 

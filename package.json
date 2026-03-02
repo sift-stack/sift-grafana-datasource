@@ -43,7 +43,7 @@
     "@types/testing-library__jest-dom": "5.14.8",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
-    "copy-webpack-plugin": "^11.0.0",
+    "copy-webpack-plugin": "^14.0.0",
     "css-loader": "^6.7.3",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^8.8.0",
@@ -96,6 +96,7 @@
     "tslib": "2.5.3"
   },
   "overrides": {
+    "serialize-javascript": "^7.0.3",
     "form-data": "^4.0.4",
     "qs": "^6.14.1",
     "tar": "^7.5.7",

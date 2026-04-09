@@ -65,7 +65,7 @@ describe('generateLinkFromQuery', () => {
       expect(url.searchParams.get('panelType')).toBe('timeseries');
     });
 
-    it('should include assets in the query string', () => {
+    it('should include assets in the query string when runs are not present', () => {
       const items: SharelinkItems = {
         channelIds: ['channel-1'],
         assetIds: ['asset-1', 'asset-2'],
@@ -77,6 +77,21 @@ describe('generateLinkFromQuery', () => {
       const url = new URL(result);
       
       expect(url.searchParams.get('assetIds')).toBe('asset-1,asset-2');
+    });
+
+    it('should omit assets when runs are present', () => {
+      const items: SharelinkItems = {
+        channelIds: ['channel-1'],
+        assetIds: ['asset-1', 'asset-2'],
+        runIds: ['run-1', 'run-2'],
+        calculatedChannels: [],
+      };
+
+      const result = generateLinkFromQuery('app.siftstack.com', items);
+      const url = new URL(result);
+
+      expect(url.searchParams.has('assetIds')).toBe(false);
+      expect(url.searchParams.get('runIds')).toBe('run-1,run-2');
     });
 
     it('should include runs in the query string', () => {
@@ -224,8 +239,8 @@ describe('generateLinkFromQuery', () => {
       
       expect(url.searchParams.has('method')).toBe(true);
       expect(url.searchParams.has('channelIds')).toBe(true);
-      expect(url.searchParams.has('assetIds')).toBe(true);
       expect(url.searchParams.has('runIds')).toBe(true);
+      expect(url.searchParams.has('assetIds')).toBe(false);
     });
 
     it('should not double-encode URL components', () => {

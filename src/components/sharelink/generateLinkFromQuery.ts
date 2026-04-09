@@ -30,11 +30,14 @@ export function generateLinkFromQuery(
   timeRange?: SharelinkTimeRange
 ): string {
   const url = new URL('/explore', normalizeFrontendOrigin(hostname));
+  const hasRuns = Boolean(items.runIds && items.runIds.length > 0);
 
   url.searchParams.set('method', 'single');
   url.searchParams.set('panelType', 'timeseries');
 
-  setCommaSeparatedParam(url.searchParams, 'assetIds', items.assetIds);
+  if (!hasRuns) {
+    setCommaSeparatedParam(url.searchParams, 'assetIds', items.assetIds);
+  }
   setCommaSeparatedParam(url.searchParams, 'runIds', items.runIds);
   setCommaSeparatedParam(url.searchParams, 'channelIds', items.channelIds);
 

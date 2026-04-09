@@ -4,7 +4,7 @@ import { AppEvents } from '@grafana/data';
 import { getAppEvents } from '@grafana/runtime';
 import { getFrontendHostnameDefaults } from './getFrontendHostnameDefaults';
 import { generateLinkFromQuery } from './generateLinkFromQuery';
-import type { SharelinkItems, SharelinkTimeRange } from '../../types';
+import { QueryTypes, type QueryType, type SharelinkItems, type SharelinkTimeRange } from '../../types';
 import { SquareShareIcon } from '../common/CustomIcons';
 
 interface SharelinkMenuItemProps {
@@ -13,34 +13,48 @@ interface SharelinkMenuItemProps {
   apiBaseUrl?: string;
   frontendUrl?: string;
   timeRange?: SharelinkTimeRange;
+  queryType?: QueryType;
 }
 
 function openLink(link: string) {
   window.open(link, '_blank', 'noopener,noreferrer');
 }
 
-async function copyToClipboard(value: string) {
-  try {
-    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-      throw new Error('Clipboard API not available');
-    }
-
-    await navigator.clipboard.writeText(value);
-    const appEvents = getAppEvents();
-    if (appEvents) {
-      appEvents.publish({
-        type: AppEvents.alertSuccess.name,
-        payload: ['Copied Sift share link to clipboard'],
-      });
-    }
-  } catch (err) {
-    console.error('Failed to copy link', err);
+function publishAlert(type: string, message: string) {
+  const appEvents = getAppEvents();
+  if (appEvents) {
+    appEvents.publish({
+      type,
+      payload: [message],
+    });
   }
 }
 
-export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, timeRange }: SharelinkMenuItemProps) => {
+async function copyToClipboard(value: string) {
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+    throw new Error('Clipboard API not available');
+  }
+
+  await navigator.clipboard.writeText(value);
+}
+
+export const OpenInSiftButton = ({
+  className,
+  items,
+  apiBaseUrl,
+  frontendUrl,
+  timeRange,
+  queryType,
+}: SharelinkMenuItemProps) => {
   const { shareLink, disabledReason } = useMemo(() => {
     const trimmedFrontendUrl = frontendUrl?.trim();
+
+    if (queryType === QueryTypes.CALCULATED_CHANNEL) {
+      return {
+        shareLink: null,
+        disabledReason: 'Open in Sift is unavailable when Query Mode is set to Calculated Channels',
+      };
+    }
 
     if (!apiBaseUrl && !trimmedFrontendUrl) {
       return {
@@ -49,7 +63,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
       };
     }
 
-    if (!items || !items.channelIds || items.channelIds.length === 0) {
+    if (!items || items.channelIds.length === 0) {
       return {
         shareLink: null,
         disabledReason: 'Select a channel to enable share links',
@@ -63,7 +77,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
         disabledReason: 'Configure the Sift API REST URL to enable share links',
       };
     }
-    
+
     try {
       return {
         shareLink: generateLinkFromQuery(hostname, items, timeRange),
@@ -76,7 +90,29 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
         disabledReason: 'Failed to generate share link',
       };
     }
-  }, [apiBaseUrl, frontendUrl, items, timeRange]);
+  }, [apiBaseUrl, frontendUrl, items, queryType, timeRange]);
+
+  const handleOpen = () => {
+    if (!shareLink) {
+      return;
+    }
+
+    openLink(shareLink);
+  };
+
+  const handleCopy = async () => {
+    if (!shareLink) {
+      return;
+    }
+
+    try {
+      await copyToClipboard(shareLink);
+
+      publishAlert(AppEvents.alertSuccess.name, 'Copied Sift share link to clipboard');
+    } catch (err) {
+      console.error('Failed to copy link', err);
+    }
+  };
 
   return (
     <InlineLabel width="auto" transparent className={className} style={{ marginLeft: 'auto' }}>
@@ -87,18 +123,14 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
               label="Open Link"
               disabled={!shareLink}
               onClick={() => {
-                if (shareLink) {
-                  openLink(shareLink);
-                }
+                handleOpen();
               }}
             />
             <Menu.Item
               label={shareLink ? 'Copy to Clipboard' : 'Copy (URL not set)'}
               disabled={!shareLink}
               onClick={() => {
-                if (shareLink) {
-                  void copyToClipboard(shareLink);
-                }
+                void handleCopy();
               }}
             />
           </Menu.Group>
@@ -108,7 +140,7 @@ export const OpenInSiftButton = ({ className, items, apiBaseUrl, frontendUrl, ti
           <Button
             onClick={(event) => {
               if (shareLink) {
-                openLink(shareLink);
+                handleOpen();
                 return;
               }
               openMenu(event);

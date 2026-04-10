@@ -4,6 +4,7 @@ import { OpenInSiftButton } from './OpenInSiftButton';
 import { generateLinkFromQuery } from './generateLinkFromQuery';
 import { getFrontendHostnameDefaults } from './getFrontendHostnameDefaults';
 import { getAppEvents } from '@grafana/runtime';
+import { QueryTypes } from '../../types';
 
 jest.mock('./generateLinkFromQuery', () => ({
   generateLinkFromQuery: jest.fn(),
@@ -26,12 +27,14 @@ const getAppEventsMock = getAppEvents as jest.MockedFunction<typeof getAppEvents
 describe('OpenInSiftButton', () => {
   let logSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
+  let publishMock: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    generateLinkFromQueryMock.mockReturnValue('https://sift.example.com/explorer');
+    generateLinkFromQueryMock.mockReturnValue('https://sift.example.com/explore?method=single');
     getFrontendHostnameDefaultsMock.mockReturnValue('sift.example.com');
-    getAppEventsMock.mockReturnValue(null as any);
+    publishMock = jest.fn();
+    getAppEventsMock.mockReturnValue({ publish: publishMock } as any);
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -64,7 +67,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explore?method=single', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -96,7 +99,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explore?method=single', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -148,7 +151,7 @@ describe('OpenInSiftButton', () => {
     const button = screen.getByRole('button', { name: 'Open in Sift' });
     fireEvent.click(button);
 
-    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explorer', '_blank', 'noopener,noreferrer');
+    expect(openSpy).toHaveBeenCalledWith('https://sift.example.com/explore?method=single', '_blank', 'noopener,noreferrer');
     openSpy.mockRestore();
   });
 
@@ -251,6 +254,41 @@ describe('OpenInSiftButton', () => {
     render(<OpenInSiftButton items={items} apiBaseUrl="https://unknown-api.example.com" />);
 
     expect(getFrontendHostnameDefaultsMock).toHaveBeenCalledWith('https://unknown-api.example.com');
+    expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
+
+    const menuButton = screen.getByRole('button', { name: 'Open in Sift' });
+    expect(menuButton).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.contextMenu(menuButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /Open Link/i })).toBeDisabled();
+    });
+  });
+
+  it('disables share link when Query Mode is set to Calculated Channels', async () => {
+    const items = {
+      channelIds: ['channel-1'],
+      assetIds: ['asset-1'],
+      runIds: ['run-1'],
+      calculatedChannels: [
+        {
+          name: 'calc-1',
+          sourceChannels: ['channel-1'],
+          expression: '$1',
+          expressionDataType: 'double',
+        },
+      ],
+    };
+
+    render(
+      <OpenInSiftButton
+        items={items}
+        apiBaseUrl="https://api.sift.dev"
+        queryType={QueryTypes.CALCULATED_CHANNEL}
+      />
+    );
+
     expect(generateLinkFromQueryMock).not.toHaveBeenCalled();
 
     const menuButton = screen.getByRole('button', { name: 'Open in Sift' });

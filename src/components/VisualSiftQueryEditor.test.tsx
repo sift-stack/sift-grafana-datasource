@@ -80,6 +80,7 @@ describe('VisualSiftQueryEditor', () => {
       expect(openInSiftButtonProps).toMatchObject({
         apiBaseUrl: 'https://sift.example.com',
         frontendUrl: undefined,
+        queryType: QueryTypes.CHANNEL,
       });
     });
 
@@ -109,6 +110,11 @@ describe('VisualSiftQueryEditor', () => {
         expect(screen.getByText('Calculated Channels')).toBeInTheDocument();
         const radioButton = screen.getByLabelText('Calculated Channels');
         expect(radioButton).toBeChecked();
+      });
+
+      const openInSiftButtonProps = (OpenInSiftButton as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(openInSiftButtonProps).toMatchObject({
+        queryType: QueryTypes.CALCULATED_CHANNEL,
       });
     });
 
@@ -467,6 +473,7 @@ describe('VisualSiftQueryEditor', () => {
             from: fromDate.toISOString(),
             to: toDate.toISOString(),
           },
+          queryType: QueryTypes.CHANNEL,
         }),
         expect.anything()
       );
@@ -509,6 +516,7 @@ describe('VisualSiftQueryEditor', () => {
             from: fromIsoString,
             to: toIsoString,
           },
+          queryType: QueryTypes.CHANNEL,
         }),
         expect.anything()
       );
@@ -540,6 +548,7 @@ describe('VisualSiftQueryEditor', () => {
       expect(OpenInSiftButton).toHaveBeenCalledWith(
         expect.objectContaining({
           timeRange: undefined,
+          queryType: QueryTypes.CHANNEL,
         }),
         expect.anything()
       );

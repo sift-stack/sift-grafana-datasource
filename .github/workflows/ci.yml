@@ -58,7 +58,7 @@ jobs:
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.9'
+          go-version: '1.25.6'
 
       - name: Golangci-lint
         if: steps.check-for-backend.outputs.has-backend == 'true'
@@ -123,13 +123,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          SOURCE_DIR=$(mktemp -d)
-          rsync -a \
-            --exclude '.git' \
-            --exclude 'dist' \
-            --exclude 'node_modules' \
-            ./ "$SOURCE_DIR"/
-          npx -y @grafana/plugin-validator@latest -sourceCodeUri "file://$SOURCE_DIR" $PLUGIN_ARCHIVE 2>&1 | tee validate-output.txt
+          npx -y @grafana/plugin-validator@latest -sourceCodeUri file://./ $PLUGIN_ARCHIVE 2>&1 | tee validate-output.txt
         shell: bash
         env:
           PLUGIN_ARCHIVE: ${{ steps.metadata.outputs.archive }}

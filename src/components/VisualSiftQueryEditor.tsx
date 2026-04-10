@@ -164,7 +164,6 @@ export const VisualSiftQueryEditor = (props: Props) => {
           apiBaseUrl={apiRestUrl}
           frontendUrl={frontendUrl}
           timeRange={shareLinkTimeRange}
-          queryType={queryMode}
         />
 
       </InlineFieldRow>

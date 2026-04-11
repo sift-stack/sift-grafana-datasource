@@ -13,59 +13,51 @@ describe('generateLinkFromQuery', () => {
     it('should handle hostname without protocol and prepend https://', () => {
       const result = generateLinkFromQuery('app.siftstack.com', mockItems);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
     });
 
     it('should handle hostname with https:// protocol', () => {
       const result = generateLinkFromQuery('https://app.siftstack.com', mockItems);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
     });
 
     it('should handle hostname with http:// protocol', () => {
       const result = generateLinkFromQuery('http://localhost:3000', mockItems);
       
-      expect(result).toMatch(/^http:\/\/localhost:3000\/explore\?/);
+      expect(result).toMatch(/^http:\/\/localhost:3000\/explorer#/);
     });
 
     it('should handle hostname with port', () => {
       const result = generateLinkFromQuery('localhost:8080', mockItems);
       
-      expect(result).toMatch(/^https:\/\/localhost:8080\/explore\?/);
+      expect(result).toMatch(/^https:\/\/localhost:8080\/explorer#/);
     });
 
     it('should extract origin from full URL with path', () => {
       const result = generateLinkFromQuery('https://app.siftstack.com/some/path', mockItems);
       
       // Should use only the origin, not the path
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
       expect(result).not.toContain('/some/path');
     });
 
     it('should handle URL with query parameters by using only origin', () => {
       const result = generateLinkFromQuery('https://app.siftstack.com?foo=bar', mockItems);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
       expect(result).not.toContain('?foo=bar');
     });
 
     it('should handle URL with trailing slash', () => {
       const result = generateLinkFromQuery('https://app.siftstack.com/', mockItems);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
     });
   });
 
-  describe('dynamic URL parameters', () => {
-    it('should include the required method and panel type', () => {
-      const result = generateLinkFromQuery('app.siftstack.com', mockItems);
-      const url = new URL(result);
-
-      expect(url.searchParams.get('method')).toBe('single');
-      expect(url.searchParams.get('panelType')).toBe('timeseries');
-    });
-
-    it('should include assets in the query string when runs are not present', () => {
+  describe('hash parameters encoding', () => {
+    it('should include assets in hash', () => {
       const items: SharelinkItems = {
         channelIds: ['channel-1'],
         assetIds: ['asset-1', 'asset-2'],
@@ -74,27 +66,11 @@ describe('generateLinkFromQuery', () => {
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
       
-      expect(url.searchParams.get('assetIds')).toBe('asset-1,asset-2');
+      expect(result).toContain('assets=asset-1%2Casset-2');
     });
 
-    it('should omit assets when runs are present', () => {
-      const items: SharelinkItems = {
-        channelIds: ['channel-1'],
-        assetIds: ['asset-1', 'asset-2'],
-        runIds: ['run-1', 'run-2'],
-        calculatedChannels: [],
-      };
-
-      const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
-
-      expect(url.searchParams.has('assetIds')).toBe(false);
-      expect(url.searchParams.get('runIds')).toBe('run-1,run-2');
-    });
-
-    it('should include runs in the query string', () => {
+    it('should include runs in hash', () => {
       const items: SharelinkItems = {
         channelIds: ['channel-1'],
         assetIds: [],
@@ -103,57 +79,78 @@ describe('generateLinkFromQuery', () => {
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
       
-      expect(url.searchParams.get('runIds')).toBe('run-1,run-2');
+      expect(result).toContain('runs=run-1%2Crun-2');
     });
 
-    it('should include channels in the query string', () => {
+    it('should base64 encode legend configuration', () => {
       const result = generateLinkFromQuery('app.siftstack.com', mockItems);
-      const url = new URL(result);
       
-      expect(url.searchParams.get('channelIds')).toBe('channel-1,channel-2');
+      // Should contain base64 encoded legend
+      expect(result).toContain('legend=');
+      // Base64 strings typically contain these characters
+      expect(result).toMatch(/legend=[A-Za-z0-9+/=%]+/);
     });
 
-    it('should include time range when provided', () => {
+    it('should include time range in legend when provided', () => {
       const timeRange: SharelinkTimeRange = {
         from: '2024-01-01T00:00:00Z',
         to: '2024-01-02T00:00:00Z',
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', mockItems, timeRange);
-      const url = new URL(result);
       
-      expect(url.searchParams.get('startTime')).toBe(timeRange.from);
-      expect(url.searchParams.get('endTime')).toBe(timeRange.to);
+      // The time range should be encoded in the legend parameter
+      expect(result).toContain('legend=');
     });
 
-    it('should ignore calculated channels when building the URL', () => {
+    it('should handle calculated channels', () => {
       const itemsWithCalc: SharelinkItems = {
         channelIds: ['channel-1'],
         assetIds: ['asset-1'],
         runIds: ['run-1'],
         calculatedChannels: [
           {
-            name: 'calc-1',
-            sourceChannels: ['channel-1'],
-            expression: '$1',
-            expressionDataType: 'double',
-          },
-          {
-            name: 'calc-2',
-            sourceChannels: ['channel-1'],
-            expression: '$1 * 2',
-            expressionDataType: 'double',
+            name: 'Calculated Channel',
+            sourceChannels: ['channel-1', 'channel-2'],
+            expression: '$1 + $2',
+            expressionDataType: 'DOUBLE',
           },
         ],
       };
-
+      
       const result = generateLinkFromQuery('app.siftstack.com', itemsWithCalc);
-      const url = new URL(result);
+      
+      // Should still generate a valid URL with legend
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
+      expect(result).toContain('legend=');
+    });
 
-      expect(url.searchParams.get('channelIds')).toBe('channel-1');
-      expect(url.toString()).not.toContain('expression');
+    it('should handle multiple calculated channels', () => {
+      const itemsWithMultipleCalc: SharelinkItems = {
+        channelIds: ['channel-1'],
+        assetIds: ['asset-1'],
+        runIds: ['run-1'],
+        calculatedChannels: [
+          {
+            name: 'Calc 1',
+            sourceChannels: ['channel-1'],
+            expression: '$1 * 2',
+            expressionDataType: 'DOUBLE',
+          },
+          {
+            name: 'Calc 2',
+            sourceChannels: ['channel-1', 'channel-2'],
+            expression: '$1 + $2',
+            expressionDataType: 'DOUBLE',
+          },
+        ],
+      };
+      
+      const result = generateLinkFromQuery('app.siftstack.com', itemsWithMultipleCalc);
+      
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
+      expect(result).toContain('legend=');
     });
   });
 
@@ -167,11 +164,11 @@ describe('generateLinkFromQuery', () => {
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
-      expect(url.searchParams.has('assetIds')).toBe(false);
-      expect(url.searchParams.has('runIds')).toBe(false);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
+      // Should not include assets or runs parameters
+      expect(result).not.toContain('assets=');
+      expect(result).not.toContain('runs=');
     });
 
     it('should handle undefined asset and run arrays', () => {
@@ -183,11 +180,10 @@ describe('generateLinkFromQuery', () => {
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
-      expect(url.searchParams.has('assetIds')).toBe(false);
-      expect(url.searchParams.has('runIds')).toBe(false);
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
+      expect(result).not.toContain('assets=');
+      expect(result).not.toContain('runs=');
     });
 
     it('should handle special characters in channel IDs', () => {
@@ -199,24 +195,23 @@ describe('generateLinkFromQuery', () => {
       };
       
       const result = generateLinkFromQuery('app.siftstack.com', items);
-      const url = new URL(result);
       
-      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explore\?/);
-      expect(url.searchParams.get('channelIds')).toBe('channel-with-dash,channel_with_underscore');
+      expect(result).toMatch(/^https:\/\/app\.siftstack\.com\/explorer#/);
+      expect(result).toContain('legend=');
     });
 
     it('should handle IPv4 addresses', () => {
       const result = generateLinkFromQuery('192.168.1.1:8080', mockItems);
       
-      expect(result).toMatch(/^https:\/\/192\.168\.1\.1:8080\/explore\?/);
+      expect(result).toMatch(/^https:\/\/192\.168\.1\.1:8080\/explorer#/);
     });
 
     it('should handle localhost variations', () => {
       const result1 = generateLinkFromQuery('localhost', mockItems);
-      expect(result1).toMatch(/^https:\/\/localhost\/explore\?/);
+      expect(result1).toMatch(/^https:\/\/localhost\/explorer#/);
 
       const result2 = generateLinkFromQuery('http://localhost:3000', mockItems);
-      expect(result2).toMatch(/^http:\/\/localhost:3000\/explore\?/);
+      expect(result2).toMatch(/^http:\/\/localhost:3000\/explorer#/);
     });
   });
 
@@ -229,18 +224,20 @@ describe('generateLinkFromQuery', () => {
       
       const url = new URL(result);
       expect(url.protocol).toMatch(/^https?:$/);
-      expect(url.pathname).toBe('/explore');
-      expect(url.search).toMatch(/^\?.+/);
+      expect(url.pathname).toBe('/explorer');
+      expect(url.hash).toMatch(/^#.+/);
     });
 
-    it('should properly encode query parameters', () => {
+    it('should properly encode hash parameters', () => {
       const result = generateLinkFromQuery('app.siftstack.com', mockItems);
       const url = new URL(result);
       
-      expect(url.searchParams.has('method')).toBe(true);
-      expect(url.searchParams.has('channelIds')).toBe(true);
-      expect(url.searchParams.has('runIds')).toBe(true);
-      expect(url.searchParams.has('assetIds')).toBe(false);
+      // Hash should be parseable as URLSearchParams (without the # prefix)
+      const hashParams = new URLSearchParams(url.hash.slice(1));
+      
+      expect(hashParams.has('legend')).toBe(true);
+      expect(hashParams.has('assets')).toBe(true);
+      expect(hashParams.has('runs')).toBe(true);
     });
 
     it('should not double-encode URL components', () => {

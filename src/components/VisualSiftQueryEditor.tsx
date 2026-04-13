@@ -208,6 +208,16 @@ export const VisualSiftQueryEditor = (props: Props) => {
             onChange={(e) => onUpdateQuery({ ...query, combineRuns: e.currentTarget.checked })}
           />
         </InlineLabel>
+        <InlineLabel
+          width="auto"
+          tooltip="Combine channels with the same name across multiple assets. Otherwise, each asset's channels will be separate series."
+        >
+          <Checkbox
+            label="Combine Assets"
+            checked={query.combineAssets ?? false}
+            onChange={(e) => onUpdateQuery({ ...query, combineAssets: e.currentTarget.checked })}
+          />
+        </InlineLabel>
       </Section>
       {/*TODO: aliasing <Section label="ALIAS"></Section >*/}
     </div>

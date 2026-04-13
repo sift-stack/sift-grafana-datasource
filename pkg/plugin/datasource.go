@@ -250,6 +250,7 @@ type queryModel struct {
 	commonQueryProperties
 	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
 	CombineRuns        bool               `json:"combineRuns"`
+	CombineAssets      bool               `json:"combineAssets"`
 	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
 	AnnotationType     string             `json:"annotationType"`
@@ -352,7 +353,8 @@ type bitFieldElementValues struct {
 }
 
 type frameKey struct {
-	channelId           string
+	// Either channelId or channelName
+	channelIdentifier   string
 	runId               string
 	bitFieldElementName string
 	isEnumString        bool
@@ -425,9 +427,9 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	var frame *data.Frame
 	if fqm.AnnotationType != "" {
 		// Any annotationType set means we want the flat annotation frame format
-		frame, err = generateAnnotationFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
+		frame, err = generateAnnotationFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.CombineAssets, fqm.EnumDisplay)
 	} else {
-		frame, err = generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.EnumDisplay)
+		frame, err = generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.CombineAssets, fqm.EnumDisplay)
 	}
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating data frame: %v", err.Error()))
@@ -583,7 +585,7 @@ func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []s
 	return allData, nil
 }
 
-func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, enumDisplay string) (*data.Frame, error) {
+func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, combineAssets bool, enumDisplay string) (*data.Frame, error) {
 	// create data frame response.
 	// For an overview on data frames and how grafana handles them:
 	// https://grafana.com/developers/plugin-tools/introduction/data-frames
@@ -592,11 +594,15 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 	allData := map[frameKey]map[int64]any{}
 
 	for _, d := range responseData {
+		channelIdentifier := d.Metadata.Channel.ChannelId
+		if combineAssets {
+			channelIdentifier = d.Metadata.Channel.Name
+		}
 		switch d.Metadata.DataType {
 		case "CHANNEL_DATA_TYPE_BIT_FIELD":
 			for _, bitFieldElement := range d.Metadata.Channel.BitFieldElements {
 				key := frameKey{
-					channelId:           d.Metadata.Channel.ChannelId,
+					channelIdentifier:   channelIdentifier,
 					bitFieldElementName: bitFieldElement.Name,
 				}
 				if !combineRuns {
@@ -610,8 +616,8 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		case "CHANNEL_DATA_TYPE_ENUM":
 			if enumDisplay == EnumDisplayCombined {
 				key := frameKey{
-					channelId:      d.Metadata.Channel.ChannelId,
-					isEnumCombined: true,
+					channelIdentifier: channelIdentifier,
+					isEnumCombined:    true,
 				}
 				if !combineRuns {
 					key.runId = d.Metadata.Run.RunId
@@ -623,8 +629,8 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 			} else {
 				for _, v := range []bool{true, false} {
 					key := frameKey{
-						channelId:    d.Metadata.Channel.ChannelId,
-						isEnumString: v,
+						channelIdentifier: channelIdentifier,
+						isEnumString:      v,
 					}
 					if !combineRuns {
 						key.runId = d.Metadata.Run.RunId
@@ -637,7 +643,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 			}
 		default:
 			key := frameKey{
-				channelId: d.Metadata.Channel.ChannelId,
+				channelIdentifier: channelIdentifier,
 			}
 			if !combineRuns {
 				key.runId = d.Metadata.Run.RunId
@@ -832,7 +838,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		allDataKeys = append(allDataKeys, k)
 	}
 	sort.SliceStable(allDataKeys, func(i, j int) bool {
-		return allDataKeys[i].runId < allDataKeys[j].runId && allDataKeys[i].channelId < allDataKeys[j].channelId
+		return allDataKeys[i].runId < allDataKeys[j].runId && allDataKeys[i].channelIdentifier < allDataKeys[j].channelIdentifier
 	})
 
 	// Track enum field base names for filtering later
@@ -859,10 +865,10 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		if m.Run.RunId != "" && !combineRuns {
 			labels["run_id"] = m.Run.RunId
 		}
-		if m.Asset.Name != "" {
+		if m.Asset.Name != "" && !combineAssets {
 			labels["asset"] = m.Asset.Name
 		}
-		if m.Asset.AssetId != "" {
+		if m.Asset.AssetId != "" && !combineAssets {
 			labels["asset_id"] = m.Asset.AssetId
 		}
 		if len(m.Channel.BitFieldElements) > 0 {
@@ -1006,13 +1012,13 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 
 // generateAnnotationFrame creates an annotation-compatible data frame by reusing generateDataFrame
 // and converting it to a flat row-per-event format with metadata columns.
-func generateAnnotationFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, enumDisplay string) (*data.Frame, error) {
+func generateAnnotationFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, combineAssets bool, enumDisplay string) (*data.Frame, error) {
 	// Use combined mode for enums so we get a single "string (number)" field
 	annotationEnumDisplay := enumDisplay
 	if annotationEnumDisplay == "" || annotationEnumDisplay == EnumDisplayBoth {
 		annotationEnumDisplay = EnumDisplayCombined
 	}
-	sourceFrame, err := generateDataFrame(responseData, calculatedChannelKeys, combineRuns, annotationEnumDisplay)
+	sourceFrame, err := generateDataFrame(responseData, calculatedChannelKeys, combineRuns, combineAssets, annotationEnumDisplay)
 	if err != nil {
 		return nil, err
 	}

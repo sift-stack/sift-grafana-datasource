@@ -1113,7 +1113,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithMultipleDataTypes() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1181,7 +1181,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesCalculatedChannels() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1234,7 +1234,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesGroupByRun() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1981,7 +1981,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayBoth() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure - should have both _string and _value fields
@@ -2033,7 +2033,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayString() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayString)
 	s.NoError(err)
 
 	// Verify frame structure - should only have string field without suffix
@@ -2080,7 +2080,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayValue() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayValue)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayValue)
 	s.NoError(err)
 
 	// Verify frame structure - should only have value field without suffix
@@ -2150,7 +2150,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayMixedChannels(
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayString)
 	s.NoError(err)
 
 	// Verify frame structure - enum should be filtered, non-enum should remain
@@ -2522,7 +2522,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBasicDouble() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 	s.Equal("annotations", frame.Name)
@@ -2610,7 +2610,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameMultipleChannelsSameTim
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2664,7 +2664,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameEnumUsesCombinedMode() 
 	}
 
 	// When enumDisplay is "both", generateAnnotationFrame should override to combined
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2700,7 +2700,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameNoMetadata() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2734,7 +2734,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameHandlesNullValues() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2768,7 +2768,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBoolValues() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2813,7 +2813,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedMode() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayCombined)
 	s.NoError(err)
 
 	// Combined mode should produce a single field (plus time), not two
@@ -2861,12 +2861,12 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedVsBothMode() {
 	}
 
 	// "both" mode should produce two fields (string + value)
-	frameBoth, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frameBoth, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.Equal(3, len(frameBoth.Fields)) // time + Status_string + Status_value
 
 	// "combined" mode should produce one field
-	frameCombined, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	frameCombined, err := generateDataFrame(responseData, nil, false, false, EnumDisplayCombined)
 	s.NoError(err)
 	s.Equal(2, len(frameCombined.Fields)) // time + Status
 }

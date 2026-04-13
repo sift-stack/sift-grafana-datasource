@@ -878,7 +878,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				}
 			}
 		}
-		if include_channel_id {
+		if include_channel_id && !combineAssets {
 			labels["channel_id"] = m.Channel.ChannelId
 		}
 

@@ -353,8 +353,11 @@ type bitFieldElementValues struct {
 }
 
 type frameKey struct {
-	// Either channelId or channelName
-	channelIdentifier   string
+	// channelId when combineAssets=false, channelName when combineAssets=true
+	channelIdentifier string
+	// dataType is used to differentiate channels in the event combineAssets=true
+	// and two or more channels share a name, but not a type
+	dataType            string
 	runId               string
 	bitFieldElementName string
 	isEnumString        bool
@@ -644,6 +647,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		default:
 			key := frameKey{
 				channelIdentifier: channelIdentifier,
+				dataType:          d.Metadata.DataType,
 			}
 			if !combineRuns {
 				key.runId = d.Metadata.Run.RunId

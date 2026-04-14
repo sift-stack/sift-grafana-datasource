@@ -210,12 +210,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
         </InlineLabel>
         <InlineLabel
           width="auto"
-          tooltip="Combine channels with the same name across multiple assets. Otherwise, each asset's channels will be separate series."
+          tooltip="Group channels that share the same name into a single series. Use this to combine assets with common channel names."
         >
           <Checkbox
-            label="Combine Assets"
-            checked={query.combineAssets ?? false}
-            onChange={(e) => onUpdateQuery({ ...query, combineAssets: e.currentTarget.checked })}
+            label="Group by Channel Name"
+            checked={query.groupByChannelName ?? false}
+            onChange={(e) => onUpdateQuery({ ...query, groupByChannelName: e.currentTarget.checked })}
           />
         </InlineLabel>
       </Section>

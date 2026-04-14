@@ -62,6 +62,30 @@ var ValidSiftGrafanaDataTypes = []string{
 	// Note: No bytes
 }
 
+// Used to differentiate channels when the name is identical
+func dataTypeSuffix(dataType string) string {
+	switch dataType {
+	case "CHANNEL_DATA_TYPE_DOUBLE":
+		return "double"
+	case "CHANNEL_DATA_TYPE_FLOAT":
+		return "float"
+	case "CHANNEL_DATA_TYPE_INT_32":
+		return "int32"
+	case "CHANNEL_DATA_TYPE_INT_64":
+		return "int64"
+	case "CHANNEL_DATA_TYPE_UINT_32":
+		return "uint32"
+	case "CHANNEL_DATA_TYPE_UINT_64":
+		return "uint64"
+	case "CHANNEL_DATA_TYPE_BOOL":
+		return "bool"
+	case "CHANNEL_DATA_TYPE_STRING":
+		return "string"
+	default:
+		return dataType
+	}
+}
+
 const cacheTimeToLiveMax = time.Minute * 10
 const cacheTimeToLiveMin = cacheTimeToLiveMax / 2
 const cachePurgeTime = time.Minute * 5
@@ -250,7 +274,7 @@ type queryModel struct {
 	commonQueryProperties
 	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
 	CombineRuns        bool               `json:"combineRuns"`
-	CombineAssets      bool               `json:"combineAssets"`
+	GroupByChannelName      bool               `json:"groupByChannelName"`
 	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
 	AnnotationType     string             `json:"annotationType"`
@@ -353,9 +377,9 @@ type bitFieldElementValues struct {
 }
 
 type frameKey struct {
-	// channelId when combineAssets=false, channelName when combineAssets=true
+	// channelId when groupByChannelName=false, channelName when groupByChannelName=true
 	channelIdentifier string
-	// dataType is used to differentiate channels in the event combineAssets=true
+	// dataType is used to differentiate channels in the event groupByChannelName=true
 	// and two or more channels share a name, but not a type
 	dataType            string
 	runId               string
@@ -430,9 +454,9 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	var frame *data.Frame
 	if fqm.AnnotationType != "" {
 		// Any annotationType set means we want the flat annotation frame format
-		frame, err = generateAnnotationFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.CombineAssets, fqm.EnumDisplay)
+		frame, err = generateAnnotationFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.GroupByChannelName, fqm.EnumDisplay)
 	} else {
-		frame, err = generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.CombineAssets, fqm.EnumDisplay)
+		frame, err = generateDataFrame(responseData, calculatedChannelKeys, fqm.CombineRuns, fqm.GroupByChannelName, fqm.EnumDisplay)
 	}
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating data frame: %v", err.Error()))
@@ -588,7 +612,7 @@ func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []s
 	return allData, nil
 }
 
-func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, combineAssets bool, enumDisplay string) (*data.Frame, error) {
+func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, groupByChannelName bool, enumDisplay string) (*data.Frame, error) {
 	// create data frame response.
 	// For an overview on data frames and how grafana handles them:
 	// https://grafana.com/developers/plugin-tools/introduction/data-frames
@@ -598,7 +622,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 
 	for _, d := range responseData {
 		channelIdentifier := d.Metadata.Channel.ChannelId
-		if combineAssets {
+		if groupByChannelName {
 			channelIdentifier = d.Metadata.Channel.Name
 		}
 		switch d.Metadata.DataType {
@@ -845,12 +869,37 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		return allDataKeys[i].runId < allDataKeys[j].runId && allDataKeys[i].channelIdentifier < allDataKeys[j].channelIdentifier
 	})
 
+	// When groupByChannelName=true, a channel name may appear with multiple data types
+	// This tracks those conflicts so we can later append the type on the displayed name
+	typeConflicts := map[string]bool{}
+	if groupByChannelName {
+		identifierTypes := map[string]map[string]bool{}
+		for _, k := range allDataKeys {
+			if k.dataType == "" {
+				continue
+			}
+			if identifierTypes[k.channelIdentifier] == nil {
+				identifierTypes[k.channelIdentifier] = map[string]bool{}
+			}
+			identifierTypes[k.channelIdentifier][k.dataType] = true
+		}
+		for ident, types := range identifierTypes {
+			if len(types) > 1 {
+				typeConflicts[ident] = true
+			}
+		}
+	}
+
 	// Track enum field base names for filtering later
 	enumFieldBaseNames := map[string]bool{}
 
 	for _, key := range allDataKeys {
 		m := md[key]
 		name := m.Channel.Name
+		// Append the channel type if there are type conflicts (pressure int32, pressure float)
+		if typeConflicts[key.channelIdentifier] {
+			name = fmt.Sprintf("%s %s", name, dataTypeSuffix(key.dataType))
+		}
 		include_channel_id := false
 		var field *data.Field
 		labels := data.Labels{}
@@ -869,10 +918,20 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		if m.Run.RunId != "" && !combineRuns {
 			labels["run_id"] = m.Run.RunId
 		}
-		if m.Asset.Name != "" && !combineAssets {
+		groupedAcrossAssets := false
+		if groupByChannelName {
+			firstAssetId := dataMap[key][0].Metadata.Asset.AssetId
+			for _, d := range dataMap[key][1:] {
+				if d.Metadata.Asset.AssetId != firstAssetId {
+					groupedAcrossAssets = true
+					break
+				}
+			}
+		}
+		if m.Asset.Name != "" && !groupedAcrossAssets {
 			labels["asset"] = m.Asset.Name
 		}
-		if m.Asset.AssetId != "" && !combineAssets {
+		if m.Asset.AssetId != "" && !groupedAcrossAssets {
 			labels["asset_id"] = m.Asset.AssetId
 		}
 		if len(m.Channel.BitFieldElements) > 0 {
@@ -882,7 +941,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				}
 			}
 		}
-		if include_channel_id && !combineAssets {
+		if include_channel_id && !groupedAcrossAssets {
 			labels["channel_id"] = m.Channel.ChannelId
 		}
 
@@ -1016,13 +1075,13 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 
 // generateAnnotationFrame creates an annotation-compatible data frame by reusing generateDataFrame
 // and converting it to a flat row-per-event format with metadata columns.
-func generateAnnotationFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, combineAssets bool, enumDisplay string) (*data.Frame, error) {
+func generateAnnotationFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, groupByChannelName bool, enumDisplay string) (*data.Frame, error) {
 	// Use combined mode for enums so we get a single "string (number)" field
 	annotationEnumDisplay := enumDisplay
 	if annotationEnumDisplay == "" || annotationEnumDisplay == EnumDisplayBoth {
 		annotationEnumDisplay = EnumDisplayCombined
 	}
-	sourceFrame, err := generateDataFrame(responseData, calculatedChannelKeys, combineRuns, combineAssets, annotationEnumDisplay)
+	sourceFrame, err := generateDataFrame(responseData, calculatedChannelKeys, combineRuns, groupByChannelName, annotationEnumDisplay)
 	if err != nil {
 		return nil, err
 	}

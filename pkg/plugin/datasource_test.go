@@ -1247,6 +1247,110 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesGroupByRun() {
 	s.Equal("run1", frame.Fields[1].Labels["run_id"])
 }
 
+func (s *DatasourceTestSuite) TestGenerateDataFrameGroupByChannelName_MergesSameNameChannels() {
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset-rf", Name: "sat-1.rf"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-id-1", Name: "Temperature"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + t1.Format(time.RFC3339Nano) + `", "value": 25.0}]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset-umb", Name: "sat-1.umb"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-id-2", Name: "Temperature"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + t2.Format(time.RFC3339Nano) + `", "value": 26.0}]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, true, EnumDisplayBoth)
+	s.NoError(err)
+
+	// Both assets' Temperature channels should be merged into one series
+	s.Equal(2, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Temperature", frame.Fields[1].Name)
+
+	// Asset and channel_id labels should be absent when combining assets
+	s.Empty(frame.Fields[1].Labels["asset"])
+	s.Empty(frame.Fields[1].Labels["asset_id"])
+	s.Empty(frame.Fields[1].Labels["channel_id"])
+
+	// Values from both assets should be present
+	s.Equal(2, frame.Fields[1].Len())
+	s.Equal(25.0, *frame.Fields[1].At(0).(*float64))
+	s.Equal(26.0, *frame.Fields[1].At(1).(*float64))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameGroupByChannelName_SeparatesConflictingTypes() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset1", Name: "Asset 1"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-1", Name: "Pressure"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 100.0}]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_INT_32",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset2", Name: "Asset 2"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-2", Name: "Pressure"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 100}]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, true, EnumDisplayBoth)
+	s.NoError(err)
+
+	// Channels with the same name but different data types must not be merged,
+	s.Equal(3, len(frame.Fields)) // time + two Pressure fields
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Pressure double", frame.Fields[1].Name)
+	s.Equal("Pressure int32", frame.Fields[2].Name)
+}
+
 func (s *DatasourceTestSuite) TestSplitQueriesIntoChunks() {
 	queries := []siftApiGetDataSubQuery{
 		{
@@ -2299,7 +2403,7 @@ func TestCheckInt64PrecisionLoss(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			frame := createTestFrame(tt.fieldType, tt.values, tt.labels)
-			
+
 			checkInt64PrecisionLoss(frame)
 
 			if tt.expectWarning {
@@ -2882,7 +2986,7 @@ func uint64Ptr(v uint64) *uint64 {
 
 func createTestFrame(fieldType string, values interface{}, labels map[string]string) *data.Frame {
 	frame := data.NewFrame("test_frame")
-	
+
 	var field *data.Field
 	switch fieldType {
 	case "int64":
@@ -2896,7 +3000,7 @@ func createTestFrame(fieldType string, values interface{}, labels map[string]str
 	default:
 		panic("unsupported field type")
 	}
-	
+
 	frame.Fields = append(frame.Fields, field)
 	return frame
 }

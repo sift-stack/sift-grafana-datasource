@@ -69,6 +69,7 @@ export type AnnotationQueryType = 'dataQuery' | 'annotationsQuery';
 export interface SiftQuery extends DataQuery {
   channelDataQueries?: ChannelDataQuery[];
   combineRuns?: boolean;
+  groupByChannelName?: boolean;
   enumDisplay?: EnumDisplayType;
   queryVersion: string;
   annotationType?: AnnotationQueryType;
@@ -78,6 +79,7 @@ export interface SiftQuery extends DataQuery {
 export const DEFAULT_QUERY: Partial<SiftQuery> = {
   channelDataQueries: [],
   combineRuns: true,
+  groupByChannelName: false,
   enumDisplay: 'both',
   queryVersion: QUERY_VERSION,
 };

@@ -1113,7 +1113,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithMultipleDataTypes() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1181,7 +1181,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesCalculatedChannels() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, calculatedChannelKeys, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1234,7 +1234,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesGroupByRun() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure
@@ -1245,6 +1245,113 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameHandlesGroupByRun() {
 	// Verify run labels
 	s.Equal("Run 1", frame.Fields[1].Labels["run"])
 	s.Equal("run1", frame.Fields[1].Labels["run_id"])
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameGroupByChannelName_MergesSameNameChannels() {
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset-rf", Name: "sat-1.rf"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-id-1", Name: "Temperature"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + t1.Format(time.RFC3339Nano) + `", "value": 25.0}]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset-umb", Name: "sat-1.umb"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-id-2", Name: "Temperature"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + t2.Format(time.RFC3339Nano) + `", "value": 26.0}]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, true, EnumDisplayBoth)
+	s.NoError(err)
+
+	// Both assets' Temperature channels should be merged into one series
+	s.Equal(2, len(frame.Fields))
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Temperature", frame.Fields[1].Name)
+
+	// Asset and channel_id labels should be absent when combining assets
+	s.Empty(frame.Fields[1].Labels["asset"])
+	s.Empty(frame.Fields[1].Labels["asset_id"])
+	s.Empty(frame.Fields[1].Labels["channel_id"])
+
+	// Values from both assets should be present
+	s.Equal(2, frame.Fields[1].Len())
+	s.Equal(25.0, *frame.Fields[1].At(0).(*float64))
+	s.Equal(26.0, *frame.Fields[1].At(1).(*float64))
+}
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameGroupByChannelName_SeparatesConflictingTypes() {
+	now := time.Now()
+	responseData := []queryResponseData{
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_DOUBLE",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset1", Name: "Asset 1"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-1", Name: "Pressure"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 100.0}]`),
+		},
+		{
+			Metadata: queryResponseMetadata{
+				DataType: "CHANNEL_DATA_TYPE_INT_32",
+				Asset: struct {
+					AssetId string "json:\"assetId\""
+					Name    string "json:\"name\""
+				}{AssetId: "asset2", Name: "Asset 2"},
+				Channel: struct {
+					ChannelId        string                                "json:\"channelId\""
+					Name             string                                "json:\"name\""
+					EnumTypes        []queryResponseChannelEnumType        "json:\"enumTypes\""
+					BitFieldElements []queryResponseChannelBitFieldElement "json:\"bitFieldElements\""
+				}{ChannelId: "channel-2", Name: "Pressure"},
+			},
+			Values: json.RawMessage(`[{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 100}]`),
+		},
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, true, EnumDisplayBoth)
+	s.NoError(err)
+
+	// Channels with the same name but different data types must not be merged
+	// they are distinguished by the data_type label
+	s.Equal(3, len(frame.Fields)) // time + two Pressure fields
+	s.Equal("time", frame.Fields[0].Name)
+	s.Equal("Pressure", frame.Fields[1].Name)
+	s.Equal("Pressure", frame.Fields[2].Name)
+	s.Equal("double", frame.Fields[1].Labels["data_type"])
+	s.Equal("int32", frame.Fields[2].Labels["data_type"])
 }
 
 func (s *DatasourceTestSuite) TestSplitQueriesIntoChunks() {
@@ -1981,7 +2088,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayBoth() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayBoth)
 	s.NoError(err)
 
 	// Verify frame structure - should have both _string and _value fields
@@ -2033,7 +2140,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayString() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayString)
 	s.NoError(err)
 
 	// Verify frame structure - should only have string field without suffix
@@ -2080,7 +2187,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayValue() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayValue)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayValue)
 	s.NoError(err)
 
 	// Verify frame structure - should only have value field without suffix
@@ -2150,7 +2257,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameWithEnumDisplayMixedChannels(
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, true, EnumDisplayString)
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayString)
 	s.NoError(err)
 
 	// Verify frame structure - enum should be filtered, non-enum should remain
@@ -2299,7 +2406,7 @@ func TestCheckInt64PrecisionLoss(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			frame := createTestFrame(tt.fieldType, tt.values, tt.labels)
-			
+
 			checkInt64PrecisionLoss(frame)
 
 			if tt.expectWarning {
@@ -2522,7 +2629,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBasicDouble() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 	s.Equal("annotations", frame.Name)
@@ -2610,7 +2717,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameMultipleChannelsSameTim
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2664,7 +2771,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameEnumUsesCombinedMode() 
 	}
 
 	// When enumDisplay is "both", generateAnnotationFrame should override to combined
-	frame, err := generateAnnotationFrame(responseData, nil, false, EnumDisplayBoth)
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2700,7 +2807,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameNoMetadata() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2734,7 +2841,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameHandlesNullValues() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2768,7 +2875,7 @@ func (s *DatasourceTestSuite) TestGenerateAnnotationFrameBoolValues() {
 		},
 	}
 
-	frame, err := generateAnnotationFrame(responseData, nil, false, "")
+	frame, err := generateAnnotationFrame(responseData, nil, false, false, "")
 	s.NoError(err)
 	s.NotNil(frame)
 
@@ -2813,7 +2920,7 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedMode() {
 		},
 	}
 
-	frame, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	frame, err := generateDataFrame(responseData, nil, false, false, EnumDisplayCombined)
 	s.NoError(err)
 
 	// Combined mode should produce a single field (plus time), not two
@@ -2861,12 +2968,12 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameEnumCombinedVsBothMode() {
 	}
 
 	// "both" mode should produce two fields (string + value)
-	frameBoth, err := generateDataFrame(responseData, nil, false, EnumDisplayBoth)
+	frameBoth, err := generateDataFrame(responseData, nil, false, false, EnumDisplayBoth)
 	s.NoError(err)
 	s.Equal(3, len(frameBoth.Fields)) // time + Status_string + Status_value
 
 	// "combined" mode should produce one field
-	frameCombined, err := generateDataFrame(responseData, nil, false, EnumDisplayCombined)
+	frameCombined, err := generateDataFrame(responseData, nil, false, false, EnumDisplayCombined)
 	s.NoError(err)
 	s.Equal(2, len(frameCombined.Fields)) // time + Status
 }
@@ -2882,7 +2989,7 @@ func uint64Ptr(v uint64) *uint64 {
 
 func createTestFrame(fieldType string, values interface{}, labels map[string]string) *data.Frame {
 	frame := data.NewFrame("test_frame")
-	
+
 	var field *data.Field
 	switch fieldType {
 	case "int64":
@@ -2896,7 +3003,7 @@ func createTestFrame(fieldType string, values interface{}, labels map[string]str
 	default:
 		panic("unsupported field type")
 	}
-	
+
 	frame.Fields = append(frame.Fields, field)
 	return frame
 }

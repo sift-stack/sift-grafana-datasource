@@ -208,6 +208,16 @@ export const VisualSiftQueryEditor = (props: Props) => {
             onChange={(e) => onUpdateQuery({ ...query, combineRuns: e.currentTarget.checked })}
           />
         </InlineLabel>
+        <InlineLabel
+          width="auto"
+          tooltip="Group channels that share the same name and data type into a single series. Use this to combine assets with common channel names."
+        >
+          <Checkbox
+            label="Group by Channel Name"
+            checked={query.groupByChannelName ?? false}
+            onChange={(e) => onUpdateQuery({ ...query, groupByChannelName: e.currentTarget.checked })}
+          />
+        </InlineLabel>
       </Section>
       {/*TODO: aliasing <Section label="ALIAS"></Section >*/}
     </div>

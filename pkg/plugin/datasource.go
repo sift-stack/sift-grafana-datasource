@@ -62,8 +62,8 @@ var ValidSiftGrafanaDataTypes = []string{
 	// Note: No bytes
 }
 
-// Used to differentiate channels when the name is identical
-func dataTypeSuffix(dataType string) string {
+// Provides a more concise data_type label
+func dataTypeLabel(dataType string) string {
 	switch dataType {
 	case "CHANNEL_DATA_TYPE_DOUBLE":
 		return "double"
@@ -81,6 +81,10 @@ func dataTypeSuffix(dataType string) string {
 		return "bool"
 	case "CHANNEL_DATA_TYPE_STRING":
 		return "string"
+	case "CHANNEL_DATA_TYPE_ENUM":
+		return "enum"
+	case "CHANNEL_DATA_TYPE_BIT_FIELD":
+		return "bitfield"
 	default:
 		return dataType
 	}
@@ -274,7 +278,7 @@ type queryModel struct {
 	commonQueryProperties
 	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
 	CombineRuns        bool               `json:"combineRuns"`
-	GroupByChannelName      bool               `json:"groupByChannelName"`
+	GroupByChannelName bool               `json:"groupByChannelName"`
 	EnumDisplay        string             `json:"enumDisplay"`
 	QueryVersion       string             `json:"queryVersion"`
 	AnnotationType     string             `json:"annotationType"`
@@ -869,37 +873,12 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		return allDataKeys[i].runId < allDataKeys[j].runId && allDataKeys[i].channelIdentifier < allDataKeys[j].channelIdentifier
 	})
 
-	// When groupByChannelName=true, a channel name may appear with multiple data types
-	// This tracks those conflicts so we can later append the type on the displayed name
-	typeConflicts := map[string]bool{}
-	if groupByChannelName {
-		identifierTypes := map[string]map[string]bool{}
-		for _, k := range allDataKeys {
-			if k.dataType == "" {
-				continue
-			}
-			if identifierTypes[k.channelIdentifier] == nil {
-				identifierTypes[k.channelIdentifier] = map[string]bool{}
-			}
-			identifierTypes[k.channelIdentifier][k.dataType] = true
-		}
-		for ident, types := range identifierTypes {
-			if len(types) > 1 {
-				typeConflicts[ident] = true
-			}
-		}
-	}
-
 	// Track enum field base names for filtering later
 	enumFieldBaseNames := map[string]bool{}
 
 	for _, key := range allDataKeys {
 		m := md[key]
 		name := m.Channel.Name
-		// Append the channel type if there are type conflicts (pressure int32, pressure float)
-		if typeConflicts[key.channelIdentifier] {
-			name = fmt.Sprintf("%s %s", name, dataTypeSuffix(key.dataType))
-		}
 		include_channel_id := false
 		var field *data.Field
 		labels := data.Labels{}
@@ -934,16 +913,14 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		if m.Asset.AssetId != "" && !groupedAcrossAssets {
 			labels["asset_id"] = m.Asset.AssetId
 		}
-		if len(m.Channel.BitFieldElements) > 0 {
-			for _, bitFieldElement := range m.Channel.BitFieldElements {
-				if key.bitFieldElementName == bitFieldElement.Name {
-					labels["bitfield_element"] = bitFieldElement.Name
-				}
-			}
+		if key.bitFieldElementName != "" {
+			labels["bitfield_element"] = key.bitFieldElementName
 		}
 		if include_channel_id && !groupedAcrossAssets {
 			labels["channel_id"] = m.Channel.ChannelId
 		}
+
+		labels["data_type"] = dataTypeLabel(m.DataType)
 
 		switch m.DataType {
 		default:

@@ -1344,11 +1344,14 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameGroupByChannelName_SeparatesC
 	frame, err := generateDataFrame(responseData, nil, true, true, EnumDisplayBoth)
 	s.NoError(err)
 
-	// Channels with the same name but different data types must not be merged,
+	// Channels with the same name but different data types must not be merged
+	// they are distinguished by the data_type label
 	s.Equal(3, len(frame.Fields)) // time + two Pressure fields
 	s.Equal("time", frame.Fields[0].Name)
-	s.Equal("Pressure double", frame.Fields[1].Name)
-	s.Equal("Pressure int32", frame.Fields[2].Name)
+	s.Equal("Pressure", frame.Fields[1].Name)
+	s.Equal("Pressure", frame.Fields[2].Name)
+	s.Equal("double", frame.Fields[1].Labels["data_type"])
+	s.Equal("int32", frame.Fields[2].Labels["data_type"])
 }
 
 func (s *DatasourceTestSuite) TestSplitQueriesIntoChunks() {

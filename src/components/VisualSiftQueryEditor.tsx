@@ -210,7 +210,7 @@ export const VisualSiftQueryEditor = (props: Props) => {
         </InlineLabel>
         <InlineLabel
           width="auto"
-          tooltip="Group channels that share the same name into a single series. Use this to combine assets with common channel names."
+          tooltip="Group channels that share the same name and data type into a single series. Use this to combine assets with common channel names."
         >
           <Checkbox
             label="Group by Channel Name"

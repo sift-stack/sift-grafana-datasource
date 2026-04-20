@@ -15,7 +15,8 @@
     "e2": "echo disabled. original command: playright test",
     "server": "docker-compose up --build",
     "server:watch": "docker-compose up -d --build && (docker-compose logs -f & ./dev-watch.sh)",
-    "sign": "npx --yes @grafana/sign-plugin@latest"
+    "sign": "npx --yes @grafana/sign-plugin@latest",
+    "postinstall": "rm -rf node_modules/flatted/golang"
   },
   "author": "Sift",
   "license": "Apache-2.0",

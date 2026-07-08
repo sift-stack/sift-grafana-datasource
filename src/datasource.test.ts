@@ -11,6 +11,15 @@ jest.mock('@grafana/runtime', () => ({
   },
 }));
 
+jest.mock('@grafana/async-query-data', () => ({
+  DatasourceWithAsyncBackend: class {
+    constructor() {}
+    postResource = jest.fn();
+    getResource = jest.fn();
+    getRef = jest.fn().mockReturnValue({ uid: 'test-uid', type: 'sift-datasource' });
+  },
+}));
+
 describe('SiftDataSource', () => {
   let datasource: SiftDataSource;
   let mockTemplateSrv: any;

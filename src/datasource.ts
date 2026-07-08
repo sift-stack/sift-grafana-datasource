@@ -6,7 +6,7 @@ import {
   DataSourceInstanceSettings,
   ScopedVars,
 } from '@grafana/data';
-import { DataSourceWithBackend } from '@grafana/runtime';
+import { DatasourceWithAsyncBackend } from '@grafana/async-query-data';
 import { Observable, from } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { SiftVariableSupport } from 'variables';
@@ -15,7 +15,7 @@ import { DEFAULT_QUERY, SiftDataSourceOptions, SiftQuery, QUERY_VERSION } from '
 import { ensureQueryDefaults, filterQueryBeforeRequest, replaceTemplateVariablesInQuery } from './utils';
 import { AnnotationQueryEditor } from './components/AnnotationQueryEditor';
 
-export class SiftDataSource extends DataSourceWithBackend<SiftQuery, SiftDataSourceOptions> {
+export class SiftDataSource extends DatasourceWithAsyncBackend<SiftQuery, SiftDataSourceOptions> {
   annotations: AnnotationSupport<SiftQuery> = {
     QueryEditor: AnnotationQueryEditor,
   };

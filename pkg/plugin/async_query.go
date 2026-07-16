@@ -24,7 +24,16 @@ const (
 	asyncJobStatusError    = "error"
 
 	asyncJobTTL      = 10 * time.Minute
-	asyncJobReapTick = 1 * time.Minute
+	asyncJobReapTick = 10 * time.Second
+
+	// asyncJobIdleTimeout reclaims async jobs the frontend has stopped polling. A live
+	// query is polled at least every ~10s (the async-query-data max poll interval), so a
+	// job not polled within this window has been abandoned (panel superseded, time range
+	// changed, tab closed). Grafana does not reliably send a cancel in those cases (a known
+	// platform limitation), so this server-side reclamation — not the client cancel — is
+	// what frees the goroutine, the in-flight backend read, and the concurrency slot.
+	// callAsyncQueryCancel remains the best-effort fast path when the client does cancel.
+	asyncJobIdleTimeout = 30 * time.Second
 
 	// defaultMaxConcurrentAsyncQueries bounds how many async queries (query blocks)
 	// execute against the Sift backend at once across every panel and dashboard served by
@@ -56,11 +65,12 @@ func asyncMaxConcurrentQueries() int64 {
 
 // asyncJob represents an in-flight or completed async query.
 type asyncJob struct {
-	Status    string
-	Frames    []*data.Frame
-	Error     string
-	CreatedAt time.Time
-	cancel    context.CancelFunc
+	Status       string
+	Frames       []*data.Frame
+	Error        string
+	CreatedAt    time.Time
+	LastPolledAt time.Time
+	cancel       context.CancelFunc
 }
 
 // asyncJobStore manages async query jobs with TTL-based cleanup and bounds the number
@@ -91,21 +101,35 @@ func (s *asyncJobStore) reapLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			s.mu.Lock()
-			now := time.Now()
-			for id, job := range s.jobs {
-				if now.Sub(job.CreatedAt) > asyncJobTTL {
-					if job.cancel != nil {
-						job.cancel()
-					}
-					delete(s.jobs, id)
-					log.DefaultLogger.Debug("async job reaped", "id", id)
-				}
-			}
-			s.mu.Unlock()
+			s.reapOnce(time.Now())
 		case <-s.done:
 			return
 		}
+	}
+}
+
+// reapOnce cancels and removes jobs abandoned by the frontend (not polled within
+// asyncJobIdleTimeout) or older than asyncJobTTL. Cancelling aborts the job's context,
+// which stops the in-flight backend read and releases its concurrency slot.
+func (s *asyncJobStore) reapOnce(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, job := range s.jobs {
+		idle := now.Sub(job.LastPolledAt) > asyncJobIdleTimeout
+		expired := now.Sub(job.CreatedAt) > asyncJobTTL
+		if !idle && !expired {
+			continue
+		}
+		if job.cancel != nil {
+			job.cancel()
+		}
+		delete(s.jobs, id)
+		reason := "idle"
+		if expired {
+			reason = "ttl"
+		}
+		log.DefaultLogger.Info("async job reaped", "id", id, "reason", reason,
+			"status", job.Status, "idleMs", now.Sub(job.LastPolledAt).Milliseconds())
 	}
 }
 
@@ -115,11 +139,13 @@ func (s *asyncJobStore) stop() {
 
 func (s *asyncJobStore) create(cancel context.CancelFunc) string {
 	id := uuid.New().String()
+	now := time.Now()
 	s.mu.Lock()
 	s.jobs[id] = &asyncJob{
-		Status:    asyncJobStatusStarted,
-		CreatedAt: time.Now(),
-		cancel:    cancel,
+		Status:       asyncJobStatusStarted,
+		CreatedAt:    now,
+		LastPolledAt: now,
+		cancel:       cancel,
 	}
 	s.mu.Unlock()
 	return id
@@ -177,6 +203,10 @@ func (s *asyncJobStore) poll(id string) (status string, frames []*data.Frame, er
 	status, frames, errMsg = job.Status, job.Frames, job.Error
 	if status == asyncJobStatusComplete || status == asyncJobStatusError {
 		delete(s.jobs, id)
+	} else {
+		// Track liveness: the frontend polls a running job continually. When it stops
+		// (panel superseded / abandoned), reapOnce cancels the job by idle timeout.
+		job.LastPolledAt = time.Now()
 	}
 	return status, frames, errMsg, true
 }

@@ -662,3 +662,78 @@ func TestStartAsyncQuery_CancelWhileQueued(t *testing.T) {
 		return !ok
 	}, 2*time.Second, 10*time.Millisecond)
 }
+
+// ---------------------------------------------------------------------------
+// idle / TTL reaping (server-side reclamation of abandoned jobs)
+// ---------------------------------------------------------------------------
+
+func TestReapOnce_ReapsIdleJob(t *testing.T) {
+	store := newAsyncJobStore(defaultMaxConcurrentAsyncQueries)
+	defer store.stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	id := store.create(cancel)
+	// Simulate the frontend having stopped polling well past the idle timeout.
+	store.jobs[id].LastPolledAt = time.Now().Add(-2 * asyncJobIdleTimeout)
+
+	store.reapOnce(time.Now())
+
+	_, ok := store.get(id)
+	assert.False(t, ok, "idle job should be reaped")
+	select {
+	case <-ctx.Done(): // expected: reap cancelled the job context
+	default:
+		t.Fatal("expected job context to be cancelled on idle reap")
+	}
+}
+
+func TestReapOnce_KeepsRecentlyPolledJob(t *testing.T) {
+	store := newAsyncJobStore(defaultMaxConcurrentAsyncQueries)
+	defer store.stop()
+
+	_, cancel := context.WithCancel(context.Background())
+	id := store.create(cancel) // LastPolledAt = now
+
+	store.reapOnce(time.Now())
+
+	_, ok := store.get(id)
+	assert.True(t, ok, "recently-polled job should be kept")
+}
+
+func TestReapOnce_ReapsTtlExpired(t *testing.T) {
+	store := newAsyncJobStore(defaultMaxConcurrentAsyncQueries)
+	defer store.stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	id := store.create(cancel)
+	now := time.Now()
+	// Recently polled (not idle) but older than the TTL — the TTL backstop must still reap it.
+	store.jobs[id].CreatedAt = now.Add(-2 * asyncJobTTL)
+	store.jobs[id].LastPolledAt = now
+
+	store.reapOnce(now)
+
+	_, ok := store.get(id)
+	assert.False(t, ok, "TTL-expired job should be reaped even if recently polled")
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("expected job context to be cancelled on TTL reap")
+	}
+}
+
+func TestPoll_UpdatesLastPolledAt(t *testing.T) {
+	store := newAsyncJobStore(defaultMaxConcurrentAsyncQueries)
+	defer store.stop()
+
+	_, cancel := context.WithCancel(context.Background())
+	id := store.create(cancel)
+	// Backdate so the refresh is observable.
+	store.jobs[id].LastPolledAt = time.Now().Add(-asyncJobIdleTimeout)
+	before := store.jobs[id].LastPolledAt
+
+	status, _, _, ok := store.poll(id) // running -> refreshes LastPolledAt
+	require.True(t, ok)
+	assert.Equal(t, asyncJobStatusStarted, status)
+	assert.True(t, store.jobs[id].LastPolledAt.After(before), "poll should refresh LastPolledAt on a running job")
+}

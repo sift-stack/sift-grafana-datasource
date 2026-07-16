@@ -198,6 +198,7 @@ func (d *SiftDatasource) CallResource(ctx context.Context, req *backend.CallReso
 		return d.callAsyncQueryCancel(ctx, req, sender)
 
 	default:
+		log.DefaultLogger.Warn("unhandled CallResource path", "path", req.Path, "method", req.Method)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
 		})

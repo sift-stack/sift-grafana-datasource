@@ -269,12 +269,12 @@ func (d *SiftDatasource) listSiftAnnotations(ctx context.Context, pCtx backend.P
 	return annotations, nil
 }
 
-func (d *SiftDatasource) getData(ctx context.Context, pCtx backend.PluginContext, subQueries []siftApiGetDataSubQuery, query backend.DataQuery) ([]queryResponseData, error) {
+func (d *SiftDatasource) getData(ctx context.Context, pCtx backend.PluginContext, subQueries []siftApiGetDataSubQuery, query backend.DataQuery, sampleMs int64) ([]queryResponseData, error) {
 	backendQuery := siftApiGetDataQuery{
 		Queries:   subQueries,
 		StartTime: query.TimeRange.From.Format(time.RFC3339Nano),
 		EndTime:   query.TimeRange.To.Format(time.RFC3339Nano),
-		SampleMs:  query.Interval.Milliseconds(),
+		SampleMs:  sampleMs,
 		PageSize:  10_000,
 	}
 

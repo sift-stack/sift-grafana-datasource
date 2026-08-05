@@ -276,13 +276,14 @@ type channelDataQuery struct {
 
 type queryModel struct {
 	commonQueryProperties
-	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
-	CombineRuns        bool               `json:"combineRuns"`
-	GroupByChannelName bool               `json:"groupByChannelName"`
-	EnumDisplay        string             `json:"enumDisplay"`
-	QueryVersion       string             `json:"queryVersion"`
-	AnnotationType     string             `json:"annotationType"`
-	AnnotationFilter   string             `json:"annotationFilter"`
+	ChannelDataQueries   []channelDataQuery `json:"channelDataQueries"`
+	CombineRuns          bool               `json:"combineRuns"`
+	GroupByChannelName   bool               `json:"groupByChannelName"`
+	EnumDisplay          string             `json:"enumDisplay"`
+	EnumSkipDownsampling bool               `json:"enumSkipDownsampling"`
+	QueryVersion         string             `json:"queryVersion"`
+	AnnotationType       string             `json:"annotationType"`
+	AnnotationFilter     string             `json:"annotationFilter"`
 }
 
 type queryResponse struct {
@@ -447,10 +448,15 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	afterLoadingQueries := time.Now()
 
 	// Running the standard query for enum channels can result in them being downsampled, and produce misleading
-	// results for the user. Instead, split them out for a separate full query.
-	enumQueries, otherQueries := splitQueriesByEnumDataType(d, queries)
+	// results for the user. Allow the option to perform enum queries with no downsampling.
+	var enumQueries, downsampledQueries []siftApiGetDataSubQuery
+	if fqm.EnumSkipDownsampling {
+		enumQueries, downsampledQueries = splitQueriesByEnumDataType(d, queries)
+	} else {
+		downsampledQueries = queries
+	}
 
-	responseData, err := runDataQueries(ctx, pCtx, otherQueries, query, query.Interval.Milliseconds(), d)
+	responseData, err := runDataQueries(ctx, pCtx, downsampledQueries, query, query.Interval.Milliseconds(), d)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request

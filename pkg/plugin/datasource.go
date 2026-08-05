@@ -446,12 +446,27 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	}
 	afterLoadingQueries := time.Now()
 
-	responseData, err := runDataQueries(ctx, pCtx, queries, query, d)
+	// Running the standard query for enum channels can result in them being downsampled, and produce misleading
+	// results for the user. Instead, split them out for a separate full query.
+	enumQueries, otherQueries := splitQueriesByEnumDataType(d, queries)
+
+	responseData, err := runDataQueries(ctx, pCtx, otherQueries, query, query.Interval.Milliseconds(), d)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
 		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
+	}
+
+	if len(enumQueries) > 0 {
+		enumResponseData, err := runDataQueries(ctx, pCtx, enumQueries, query, 0, d)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+			}
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
+		}
+		responseData = append(responseData, enumResponseData...)
 	}
 	afterExecutingQueries := time.Now()
 
@@ -574,6 +589,19 @@ func sortedKeys(set map[string]struct{}) []string {
 	return result
 }
 
+func splitQueriesByEnumDataType(d *SiftDatasource, queries []siftApiGetDataSubQuery) (enumQueries []siftApiGetDataSubQuery, otherQueries []siftApiGetDataSubQuery) {
+	for _, q := range queries {
+		if q.Channel != nil {
+			if channel, ok := d.channelsIdSearchCache.Get(q.Channel.ChannelId); ok && channel.DataType == "CHANNEL_DATA_TYPE_ENUM" {
+				enumQueries = append(enumQueries, q)
+				continue
+			}
+		}
+		otherQueries = append(otherQueries, q)
+	}
+	return enumQueries, otherQueries
+}
+
 func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGetDataSubQuery {
 	var chunks [][]siftApiGetDataSubQuery
 	for i := 0; i < len(queries); i += chunkSize {
@@ -586,7 +614,10 @@ func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGe
 	return chunks
 }
 
-func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, d *SiftDatasource) ([]queryResponseData, error) {
+func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, sampleMs int64, d *SiftDatasource) ([]queryResponseData, error) {
+	if len(queries) == 0 {
+		return nil, nil
+	}
 	chunks := splitQueries(queries, (len(queries)+maxParallelDataQueries-1)/maxParallelDataQueries)
 
 	var allData []queryResponseData
@@ -599,7 +630,7 @@ func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []s
 	for _, chunk := range chunks {
 		chunk := chunk
 		g.Go(func() error {
-			dataResponse, err := d.getData(gCtx, pCtx, chunk, query)
+			dataResponse, err := d.getData(gCtx, pCtx, chunk, query, sampleMs)
 			if err != nil {
 				return err
 			}
@@ -1493,6 +1524,9 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			}
 			for _, channels := range resultsExact {
 				for _, channel := range channels {
+					// Cache by channel ID so downstream lookups work
+					// regardless of whether a channel was resolved by ID, exact name, or regex.
+					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
 					// Any channels that are not a compatible data type, remove from query
 					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {
 						channelIds = append(channelIds, channel.ChannelId)
@@ -1505,6 +1539,7 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			}
 			for _, channels := range resultsRegex {
 				for _, channel := range channels {
+					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
 					// Any channels that are not a compatible data type, remove from query
 					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {
 						channelIds = append(channelIds, channel.ChannelId)

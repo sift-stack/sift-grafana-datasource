@@ -1443,6 +1443,34 @@ func (s *DatasourceTestSuite) TestSplitQueriesHandlesChunkSizeOne() {
 	s.Equal("channel3", chunks[2][0].Channel.ChannelId)
 }
 
+// TestSplitQueriesByEnumDataType verifies that enum channels are routed to a separate
+// group so they can be requested at full fidelity, while numeric channels,
+// calculated channels, and channels with no cached schema fall back to the normal path.
+func (s *DatasourceTestSuite) TestSplitQueriesByEnumDataType() {
+	s.datasource.channelsIdSearchCache.Set("enum-channel-1", Channel{ChannelId: "enum-channel-1", DataType: "CHANNEL_DATA_TYPE_ENUM"})
+	s.datasource.channelsIdSearchCache.Set("enum-channel-2", Channel{ChannelId: "enum-channel-2", DataType: "CHANNEL_DATA_TYPE_ENUM"})
+	s.datasource.channelsIdSearchCache.Set("numeric-channel", Channel{ChannelId: "numeric-channel", DataType: "CHANNEL_DATA_TYPE_DOUBLE"})
+
+	queries := []siftApiGetDataSubQuery{
+		{Channel: &siftApiChannel{ChannelId: "enum-channel-1"}},
+		{Channel: &siftApiChannel{ChannelId: "numeric-channel"}},
+		{Channel: &siftApiChannel{ChannelId: "enum-channel-2"}},
+		{Channel: &siftApiChannel{ChannelId: "uncached-channel"}}, // no cache entry -> treated as non-enum
+		{CalculatedChannel: &siftApiCalculatedChannel{ChannelKey: "calc1"}},
+	}
+
+	enumQueries, otherQueries := splitQueriesByEnumDataType(s.datasource, queries)
+
+	s.Len(enumQueries, 2)
+	s.Equal("enum-channel-1", enumQueries[0].Channel.ChannelId)
+	s.Equal("enum-channel-2", enumQueries[1].Channel.ChannelId)
+
+	s.Len(otherQueries, 3)
+	s.Equal("numeric-channel", otherQueries[0].Channel.ChannelId)
+	s.Equal("uncached-channel", otherQueries[1].Channel.ChannelId)
+	s.Equal("calc1", otherQueries[2].CalculatedChannel.ChannelKey)
+}
+
 func (s *DatasourceTestSuite) TestGenerateQueries() {
 	runIds := []string{"run1", "run2"}
 	testCases := []struct {

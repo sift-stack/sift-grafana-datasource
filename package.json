@@ -1,6 +1,6 @@
 {
   "name": "sift-grafana-datasource",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
@@ -107,14 +107,22 @@
       "picomatch": "^4.0.4"
     },
     "serialize-javascript": "^7.0.3",
-    "form-data": "^4.0.4",
+    "form-data": "^4.0.6",
     "qs": "^6.14.1",
-    "tar": "^7.5.13",
+    "tar": "^7.5.22",
     "@remix-run/router": "^1.23.2",
     "lodash": "^4.17.23",
     "react-router": "^6.30.2",
-    "js-yaml": "^4.1.1",
-    "@isaacs/brace-expansion": "^5.0.1"
+    "js-yaml": "^4.3.1",
+    "@isaacs/brace-expansion": "^5.0.1",
+    "brace-expansion": "^5.0.9",
+    "minimatch@3.1.5": {
+      "brace-expansion": "^1.1.18"
+    },
+    "fast-uri": "^4.1.2",
+    "postcss": "^8.5.25",
+    "websocket-driver": "^0.7.5",
+    "ws": "^8.21.2"
   },
   "packageManager": "npm@9.8.0"
 }

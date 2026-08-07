@@ -280,7 +280,7 @@ type queryModel struct {
 	CombineRuns          bool               `json:"combineRuns"`
 	GroupByChannelName   bool               `json:"groupByChannelName"`
 	EnumDisplay          string             `json:"enumDisplay"`
-	EnumSkipDownsampling bool               `json:"enumSkipDownsampling"`
+	SkipDownsampling     bool               `json:"skipDownsampling"`
 	QueryVersion         string             `json:"queryVersion"`
 	AnnotationType       string             `json:"annotationType"`
 	AnnotationFilter     string             `json:"annotationFilter"`
@@ -447,32 +447,19 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	}
 	afterLoadingQueries := time.Now()
 
-	// Running the standard query for enum channels can result in them being downsampled, and produce misleading
-	// results for the user. Allow the option to perform enum queries with no downsampling.
-	var enumQueries, downsampledQueries []siftApiGetDataSubQuery
-	if fqm.EnumSkipDownsampling {
-		enumQueries, downsampledQueries = splitQueriesByEnumDataType(d, queries)
-	} else {
-		downsampledQueries = queries
+	// Running the standard query can result in data being downsampled, and produce misleading
+	// results for the user. Allow the option to query with no downsampling.
+	sampleMs := query.Interval.Milliseconds()
+	if fqm.SkipDownsampling {
+		sampleMs = 0
 	}
 
-	responseData, err := runDataQueries(ctx, pCtx, downsampledQueries, query, query.Interval.Milliseconds(), d)
+	responseData, err := runDataQueries(ctx, pCtx, queries, query, sampleMs, d)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
 		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
-	}
-
-	if len(enumQueries) > 0 {
-		enumResponseData, err := runDataQueries(ctx, pCtx, enumQueries, query, 0, d)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
-			}
-			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
-		}
-		responseData = append(responseData, enumResponseData...)
 	}
 	afterExecutingQueries := time.Now()
 
@@ -593,19 +580,6 @@ func sortedKeys(set map[string]struct{}) []string {
 	}
 	slices.Sort(result)
 	return result
-}
-
-func splitQueriesByEnumDataType(d *SiftDatasource, queries []siftApiGetDataSubQuery) (enumQueries []siftApiGetDataSubQuery, otherQueries []siftApiGetDataSubQuery) {
-	for _, q := range queries {
-		if q.Channel != nil {
-			if channel, ok := d.channelsIdSearchCache.Get(q.Channel.ChannelId); ok && channel.DataType == "CHANNEL_DATA_TYPE_ENUM" {
-				enumQueries = append(enumQueries, q)
-				continue
-			}
-		}
-		otherQueries = append(otherQueries, q)
-	}
-	return enumQueries, otherQueries
 }
 
 func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGetDataSubQuery {
@@ -729,7 +703,7 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 				warnedChannels[channelIdentifier] = true
 				dataTypeWarnings = append(dataTypeWarnings, fmt.Sprintf(
 					"Channel %q returned inconsistent data types (%q vs %q)",
-					channelIdentifier, existing.DataType, d.Metadata.DataType, existing.DataType,
+					channelIdentifier, existing.DataType, d.Metadata.DataType,
 				))
 			}
 			dataMap[key] = append(dataMap[key], d)

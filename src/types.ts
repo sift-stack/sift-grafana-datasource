@@ -71,7 +71,7 @@ export interface SiftQuery extends DataQuery {
   combineRuns?: boolean;
   groupByChannelName?: boolean;
   enumDisplay?: EnumDisplayType;
-  enumSkipDownsampling?: boolean;
+  skipDownsampling?: boolean;
   queryVersion: string;
   annotationType?: AnnotationQueryType;
   annotationFilter?: string;
@@ -82,7 +82,7 @@ export const DEFAULT_QUERY: Partial<SiftQuery> = {
   combineRuns: true,
   groupByChannelName: false,
   enumDisplay: 'both',
-  enumSkipDownsampling: false,
+  skipDownsampling: false,
   queryVersion: QUERY_VERSION,
 };
 

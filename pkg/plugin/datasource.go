@@ -660,6 +660,8 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 	dataMap := map[frameKey][]queryResponseData{}
 	md := map[frameKey]queryResponseMetadata{}
 	allData := map[frameKey]map[int64]any{}
+	dataTypeWarnings := []string{}
+	warnedChannels := map[string]bool{}
 
 	for _, d := range responseData {
 		channelIdentifier := d.Metadata.Channel.ChannelId
@@ -712,10 +714,23 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		default:
 			key := frameKey{
 				channelIdentifier: channelIdentifier,
-				dataType:          d.Metadata.DataType,
+			}
+			// Only key off of DataType if grouping by channel name to keep behavior consistent with versions before grouping
+			// by channel name was added.
+			if groupByChannelName {
+				key.dataType = d.Metadata.DataType
 			}
 			if !combineRuns {
 				key.runId = d.Metadata.Run.RunId
+			}
+			// Inconsistent dataTypes, while not keyed by default, shouldn't occur and should be logged and reported to users
+			// due to the potential for it resulting in invalid data.
+			if existing, ok := md[key]; ok && existing.DataType != d.Metadata.DataType && !warnedChannels[channelIdentifier] {
+				warnedChannels[channelIdentifier] = true
+				dataTypeWarnings = append(dataTypeWarnings, fmt.Sprintf(
+					"Channel %q returned inconsistent data types (%q vs %q)",
+					channelIdentifier, existing.DataType, d.Metadata.DataType, existing.DataType,
+				))
 			}
 			dataMap[key] = append(dataMap[key], d)
 			if _, ok := md[key]; !ok {
@@ -1079,6 +1094,15 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		Type:        data.FrameTypeTimeSeriesWide,
 		TypeVersion: data.FrameTypeVersion{0, 1},
 		Notices:     []data.Notice{},
+	}
+
+	// Log and warn for detected while grouping channels above.
+	for _, warning := range dataTypeWarnings {
+		frame.Meta.Notices = append(frame.Meta.Notices, data.Notice{
+			Severity: data.NoticeSeverityWarning,
+			Text:     warning,
+		})
+		log.DefaultLogger.Warn(warning)
 	}
 
 	// Check for precision loss in INT64/UINT64 fields

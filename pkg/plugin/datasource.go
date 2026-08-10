@@ -276,14 +276,14 @@ type channelDataQuery struct {
 
 type queryModel struct {
 	commonQueryProperties
-	ChannelDataQueries   []channelDataQuery `json:"channelDataQueries"`
-	CombineRuns          bool               `json:"combineRuns"`
-	GroupByChannelName   bool               `json:"groupByChannelName"`
-	EnumDisplay          string             `json:"enumDisplay"`
-	EnumSkipDownsampling bool               `json:"enumSkipDownsampling"`
-	QueryVersion         string             `json:"queryVersion"`
-	AnnotationType       string             `json:"annotationType"`
-	AnnotationFilter     string             `json:"annotationFilter"`
+	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
+	CombineRuns        bool               `json:"combineRuns"`
+	GroupByChannelName bool               `json:"groupByChannelName"`
+	EnumDisplay        string             `json:"enumDisplay"`
+	SkipDownsampling   bool               `json:"skipDownsampling"`
+	QueryVersion       string             `json:"queryVersion"`
+	AnnotationType     string             `json:"annotationType"`
+	AnnotationFilter   string             `json:"annotationFilter"`
 }
 
 type queryResponse struct {
@@ -447,32 +447,19 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	}
 	afterLoadingQueries := time.Now()
 
-	// Running the standard query for enum channels can result in them being downsampled, and produce misleading
-	// results for the user. Allow the option to perform enum queries with no downsampling.
-	var enumQueries, downsampledQueries []siftApiGetDataSubQuery
-	if fqm.EnumSkipDownsampling {
-		enumQueries, downsampledQueries = splitQueriesByEnumDataType(d, queries)
-	} else {
-		downsampledQueries = queries
+	// Running the standard query can result in data being downsampled, and produce misleading
+	// results for the user. Allow the option to query with no downsampling.
+	sampleMs := query.Interval.Milliseconds()
+	if fqm.SkipDownsampling {
+		sampleMs = 0
 	}
 
-	responseData, err := runDataQueries(ctx, pCtx, downsampledQueries, query, query.Interval.Milliseconds(), d)
+	responseData, err := runDataQueries(ctx, pCtx, queries, query, sampleMs, d)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
 		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
-	}
-
-	if len(enumQueries) > 0 {
-		enumResponseData, err := runDataQueries(ctx, pCtx, enumQueries, query, 0, d)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
-			}
-			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
-		}
-		responseData = append(responseData, enumResponseData...)
 	}
 	afterExecutingQueries := time.Now()
 
@@ -595,19 +582,6 @@ func sortedKeys(set map[string]struct{}) []string {
 	return result
 }
 
-func splitQueriesByEnumDataType(d *SiftDatasource, queries []siftApiGetDataSubQuery) (enumQueries []siftApiGetDataSubQuery, otherQueries []siftApiGetDataSubQuery) {
-	for _, q := range queries {
-		if q.Channel != nil {
-			if channel, ok := d.channelsIdSearchCache.Get(q.Channel.ChannelId); ok && channel.DataType == "CHANNEL_DATA_TYPE_ENUM" {
-				enumQueries = append(enumQueries, q)
-				continue
-			}
-		}
-		otherQueries = append(otherQueries, q)
-	}
-	return enumQueries, otherQueries
-}
-
 func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGetDataSubQuery {
 	var chunks [][]siftApiGetDataSubQuery
 	for i := 0; i < len(queries); i += chunkSize {
@@ -660,6 +634,8 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 	dataMap := map[frameKey][]queryResponseData{}
 	md := map[frameKey]queryResponseMetadata{}
 	allData := map[frameKey]map[int64]any{}
+	dataTypeWarnings := []string{}
+	warnedChannels := map[string]bool{}
 
 	for _, d := range responseData {
 		channelIdentifier := d.Metadata.Channel.ChannelId
@@ -712,10 +688,23 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		default:
 			key := frameKey{
 				channelIdentifier: channelIdentifier,
-				dataType:          d.Metadata.DataType,
+			}
+			// Only key off of DataType if grouping by channel name to keep behavior consistent with versions before grouping
+			// by channel name was added.
+			if groupByChannelName {
+				key.dataType = d.Metadata.DataType
 			}
 			if !combineRuns {
 				key.runId = d.Metadata.Run.RunId
+			}
+			// Inconsistent dataTypes, while not keyed by default, shouldn't occur and should be logged and reported to users
+			// due to the potential for it resulting in invalid data.
+			if existing, ok := md[key]; ok && existing.DataType != d.Metadata.DataType && !warnedChannels[channelIdentifier] {
+				warnedChannels[channelIdentifier] = true
+				dataTypeWarnings = append(dataTypeWarnings, fmt.Sprintf(
+					"Channel %q returned inconsistent data types (%q vs %q)",
+					channelIdentifier, existing.DataType, d.Metadata.DataType,
+				))
 			}
 			dataMap[key] = append(dataMap[key], d)
 			if _, ok := md[key]; !ok {
@@ -1079,6 +1068,15 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		Type:        data.FrameTypeTimeSeriesWide,
 		TypeVersion: data.FrameTypeVersion{0, 1},
 		Notices:     []data.Notice{},
+	}
+
+	// Log and warn for detected while grouping channels above.
+	for _, warning := range dataTypeWarnings {
+		frame.Meta.Notices = append(frame.Meta.Notices, data.Notice{
+			Severity: data.NoticeSeverityWarning,
+			Text:     warning,
+		})
+		log.DefaultLogger.Warn(warning)
 	}
 
 	// Check for precision loss in INT64/UINT64 fields
@@ -1528,8 +1526,10 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			if err != nil {
 				return nil, fmt.Errorf("error looking up exact channels: %w", err)
 			}
-			for _, channels := range resultsExact {
-				for _, channel := range channels {
+
+			// Iterate by `channelNameExactSearches` to ensure we return results in a deterministic order
+			for _, key := range channelNameExactSearches {
+				for _, channel := range resultsExact[key] {
 					// Cache by channel ID so downstream lookups work
 					// regardless of whether a channel was resolved by ID, exact name, or regex.
 					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
@@ -1543,8 +1543,10 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			if err != nil {
 				return nil, fmt.Errorf("error looking up regex channels: %w", err)
 			}
-			for _, channels := range resultsRegex {
-				for _, channel := range channels {
+
+			// Iterate by `channelNameRegexSearches` to ensure we return results in a deterministic order
+			for _, key := range channelNameRegexSearches {
+				for _, channel := range resultsRegex[key] {
 					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
 					// Any channels that are not a compatible data type, remove from query
 					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {

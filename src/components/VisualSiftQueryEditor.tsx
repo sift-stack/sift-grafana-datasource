@@ -191,12 +191,12 @@ export const VisualSiftQueryEditor = (props: Props) => {
           </InlineField>
           <InlineLabel
             width="auto"
-            tooltip="By default, enum channels are downsampled like other numeric channels. Enable this to always query enum data at full fidelity, at the cost of longer query times."
+            tooltip="Enable to always query data from Sift at full fidelity, at the cost of longer query times."
           >
             <Checkbox
-              label="Do not downsample enum data"
-              checked={query.enumSkipDownsampling ?? false}
-              onChange={(e) => onUpdateQuery({ ...query, enumSkipDownsampling: e.currentTarget.checked })}
+              label="Disable Downsampling"
+              checked={query.skipDownsampling ?? false}
+              onChange={(e) => onUpdateQuery({ ...query, skipDownsampling: e.currentTarget.checked })}
             />
           </InlineLabel>
         </Section>

@@ -276,14 +276,14 @@ type channelDataQuery struct {
 
 type queryModel struct {
 	commonQueryProperties
-	ChannelDataQueries   []channelDataQuery `json:"channelDataQueries"`
-	CombineRuns          bool               `json:"combineRuns"`
-	GroupByChannelName   bool               `json:"groupByChannelName"`
-	EnumDisplay          string             `json:"enumDisplay"`
-	SkipDownsampling     bool               `json:"skipDownsampling"`
-	QueryVersion         string             `json:"queryVersion"`
-	AnnotationType       string             `json:"annotationType"`
-	AnnotationFilter     string             `json:"annotationFilter"`
+	ChannelDataQueries []channelDataQuery `json:"channelDataQueries"`
+	CombineRuns        bool               `json:"combineRuns"`
+	GroupByChannelName bool               `json:"groupByChannelName"`
+	EnumDisplay        string             `json:"enumDisplay"`
+	SkipDownsampling   bool               `json:"skipDownsampling"`
+	QueryVersion       string             `json:"queryVersion"`
+	AnnotationType     string             `json:"annotationType"`
+	AnnotationFilter   string             `json:"annotationFilter"`
 }
 
 type queryResponse struct {
@@ -1526,8 +1526,10 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			if err != nil {
 				return nil, fmt.Errorf("error looking up exact channels: %w", err)
 			}
-			for _, channels := range resultsExact {
-				for _, channel := range channels {
+
+			// Iterate by `channelNameExactSearches` to ensure we return results in a deterministic order
+			for _, key := range channelNameExactSearches {
+				for _, channel := range resultsExact[key] {
 					// Cache by channel ID so downstream lookups work
 					// regardless of whether a channel was resolved by ID, exact name, or regex.
 					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
@@ -1541,8 +1543,10 @@ func getChannelQueries(ctx context.Context, pCtx backend.PluginContext, cdq chan
 			if err != nil {
 				return nil, fmt.Errorf("error looking up regex channels: %w", err)
 			}
-			for _, channels := range resultsRegex {
-				for _, channel := range channels {
+
+			// Iterate by `channelNameRegexSearches` to ensure we return results in a deterministic order
+			for _, key := range channelNameRegexSearches {
+				for _, channel := range resultsRegex[key] {
 					d.channelsIdSearchCache.Set(channel.ChannelId, channel)
 					// Any channels that are not a compatible data type, remove from query
 					if _, ok := ValidSiftDataTypesMap[channel.DataType]; ok {

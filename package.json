@@ -1,6 +1,6 @@
 {
   "name": "sift-grafana-datasource",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
@@ -88,7 +88,7 @@
     "@playwright/test": "^1.56.0",
     "leven": "^4.0.0",
     "luxon": "^3.6.1",
-    "nanoid": "^5.1.5",
+    "nanoid": "^5.1.16",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-router-dom": "^5.2.0",

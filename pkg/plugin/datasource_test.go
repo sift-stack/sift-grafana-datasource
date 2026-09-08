@@ -3049,10 +3049,12 @@ func (s *DatasourceTestSuite) TestGenerateDataFrameReportsServedResolutionPerCha
 	responseData := []queryResponseData{
 		channel("channel1", "velocity", 64000, "CHANNEL_DATA_TYPE_FLOAT"),
 		channel("channel2", "status", 0, "CHANNEL_DATA_TYPE_UINT_32"),
+		channel("calc-key", "", 1000, "CHANNEL_DATA_TYPE_DOUBLE"),
 	}
+	calculated := map[string]calculatedChannelKey{"calc-key": {channelName: "velocity error"}}
 
-	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayBoth)
+	frame, err := generateDataFrame(responseData, calculated, true, false, EnumDisplayBoth)
 	s.NoError(err)
 
-	s.Equal(map[string]any{"sampledMs": map[string]int64{"velocity": 64000, "status": 0}}, frame.Meta.Custom)
+	s.Equal(map[string]any{"sampledMs": map[string]int64{"velocity": 64000, "status": 0, "velocity error": 1000}}, frame.Meta.Custom)
 }

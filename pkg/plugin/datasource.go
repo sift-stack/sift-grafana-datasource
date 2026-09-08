@@ -1067,7 +1067,17 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 	// Meta.Custom, so this is how a reader tells a raw response from a downsampled one.
 	sampledMs := map[string]int64{}
 	for _, m := range md {
-		sampledMs[m.Channel.Name] = m.SampledMs
+		name := m.Channel.Name
+		if name == "" {
+			// Calculated channel responses carry no channel name, only the key the
+			// request was built under.
+			if ck, ok := calculatedChannelKeys[m.Channel.ChannelId]; ok {
+				name = ck.channelName
+			} else {
+				name = m.Channel.ChannelId
+			}
+		}
+		sampledMs[name] = m.SampledMs
 	}
 	frame.Meta = &data.FrameMeta{
 		Type:        data.FrameTypeTimeSeriesWide,

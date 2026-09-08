@@ -3007,3 +3007,25 @@ func createTestFrame(fieldType string, values interface{}, labels map[string]str
 	frame.Fields = append(frame.Fields, field)
 	return frame
 }
+
+func (s *DatasourceTestSuite) TestGenerateDataFrameReportsServedResolutionPerChannel() {
+	now := time.Now().UTC().Truncate(time.Second)
+	channel := func(id, name string, sampledMs int64, dataType string) queryResponseData {
+		md := queryResponseMetadata{DataType: dataType, SampledMs: sampledMs}
+		md.Channel.ChannelId = id
+		md.Channel.Name = name
+		return queryResponseData{
+			Metadata: md,
+			Values:   json.RawMessage(`[{"timestamp": "` + now.Format(time.RFC3339Nano) + `", "value": 1}]`),
+		}
+	}
+	responseData := []queryResponseData{
+		channel("channel1", "velocity", 64000, "CHANNEL_DATA_TYPE_FLOAT"),
+		channel("channel2", "status", 0, "CHANNEL_DATA_TYPE_UINT_32"),
+	}
+
+	frame, err := generateDataFrame(responseData, nil, true, false, EnumDisplayBoth)
+	s.NoError(err)
+
+	s.Equal(map[string]any{"sampledMs": map[string]int64{"velocity": 64000, "status": 0}}, frame.Meta.Custom)
+}

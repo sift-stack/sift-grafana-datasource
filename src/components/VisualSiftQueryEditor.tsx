@@ -189,6 +189,16 @@ export const VisualSiftQueryEditor = (props: Props) => {
               width={20}
             />
           </InlineField>
+          <InlineLabel
+            width="auto"
+            tooltip="Enable to always query data from Sift at full fidelity, at the cost of longer query times."
+          >
+            <Checkbox
+              label="Disable Downsampling"
+              checked={query.skipDownsampling ?? false}
+              onChange={(e) => onUpdateQuery({ ...query, skipDownsampling: e.currentTarget.checked })}
+            />
+          </InlineLabel>
         </Section>
       )}
       <QueryEditor

@@ -25,7 +25,7 @@ To configure the plugin, you will need:
 1. The Sift REST API endpoint URL
 2. A valid Sift API key
 
-Instructions for getting these values can be found in the [Sift documentation](https://docs.siftstack.com/api/authenticate/authenticate-with-the-rest-api).
+Instructions for getting these values can be found in the [Sift documentation](https://docs.siftstack.com/api/authenticate/authenticate-with-the-api).
 Enter these values when creating the datasource in Grafana.
 
 ### Usage

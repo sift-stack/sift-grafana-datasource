@@ -2987,6 +2987,33 @@ func uint64Ptr(v uint64) *uint64 {
 	return &v
 }
 
+func (s *DatasourceTestSuite) TestGetChannelQueriesOrderIsDeterministic() {
+	cdq := channelDataQuery{
+		ChannelQueries: []channelQuery{
+			{ChannelName: "Channel", NameAsRegex: true},
+		},
+	}
+	assetIds := []string{"asset1", "asset2", "asset3"}
+
+	// asset1 then asset2 then asset3, in the order the API returns them within each asset.
+	// "Bytes Channel" is on asset2 but is dropped by the data type filter.
+	expected := []string{"channel1", "channel2", "channel3", "channel4", "channel6"}
+
+	// Test multiple times to more likely catch non-deterministic behavior
+	for i := 0; i < 10; i++ {
+		s.datasource.channelsRegexSearchCache.Flush()
+
+		queries, err := getChannelQueries(context.Background(), s.pCtx, cdq, nil, assetIds, s.datasource)
+		require.NoError(s.T(), err)
+
+		returned := make([]string, 0, len(queries))
+		for _, q := range queries {
+			returned = append(returned, q.Channel.ChannelId)
+		}
+		require.Equalf(s.T(), expected, returned, "order not deterministic: expected %v returned %v", expected, returned)
+	}
+}
+
 func createTestFrame(fieldType string, values interface{}, labels map[string]string) *data.Frame {
 	frame := data.NewFrame("test_frame")
 

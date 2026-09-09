@@ -141,7 +141,7 @@ func NewSiftDatasource(ctx context.Context, s backend.DataSourceInstanceSettings
 		channelsIdSearchCache:    channelIdsCache,
 		channelsNameSearchCache:  channelNameCache,
 		channelsRegexSearchCache: channelRegexCache,
-		asyncJobs:                newAsyncJobStore(asyncMaxConcurrentQueries()),
+		asyncJobs:                newAsyncJobStore(asyncConfigFromEnv()),
 	}, nil
 }
 
@@ -226,11 +226,11 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 			continue
 		}
 
-		// Annotation queries run synchronously; all other data queries go through the
-		// async path so DatasourceWithAsyncBackend can poll for results and no single
-		// panel request is bound by Grafana's request timeout.
+		// Data queries go through the async path so DatasourceWithAsyncBackend can poll
+		// for results and no single panel request is bound by Grafana's request timeout.
+		// Annotation queries, and any caller that never polls, run synchronously.
 		var res backend.DataResponse
-		if fqm.AnnotationType != "" {
+		if fqm.AnnotationType != "" || runsSynchronously(req) {
 			res = d.query(ctx, req.PluginContext, q, *fqm)
 		} else {
 			res = d.handleAsyncQuery(req.PluginContext, q, *fqm)
@@ -241,6 +241,20 @@ func (d *SiftDatasource) QueryData(ctx context.Context, req *backend.QueryDataRe
 	}
 
 	return response, nil
+}
+
+// runsSynchronously reports whether this request comes from a caller that will never poll
+// for an async result. Grafana evaluates alert rules and server-side expressions inside the
+// backend, with no browser in the loop, so those callers would only ever see the "started"
+// marker frame. They get the synchronous path instead.
+func runsSynchronously(req *backend.QueryDataRequest) bool {
+	if req == nil {
+		return false
+	}
+	if strings.EqualFold(req.Headers["FromAlert"], "true") {
+		return true
+	}
+	return req.GetHTTPHeader("X-Grafana-From-Expr") != ""
 }
 
 type jsonData struct {
@@ -441,10 +455,11 @@ func getApiUrl(dataSourceInstanceSettings *backend.DataSourceInstanceSettings) (
 	return u, nil
 }
 
-func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) backend.DataResponse {
+func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, fqm queryModel) (response backend.DataResponse) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.DefaultLogger.Error("recovered from panic", "error", err)
+			response = backend.ErrDataResponse(backend.StatusInternal, fmt.Sprintf("panic while running query: %v", err))
 		}
 	}()
 
@@ -453,24 +468,25 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 		return d.querySiftAnnotations(ctx, pCtx, query, fqm)
 	}
 
-	var response backend.DataResponse
-
 	queryStart := time.Now()
 	queries, calculatedChannelKeys, err := generateQueries(ctx, pCtx, fqm, d)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+		if ctx.Err() != nil {
+			return contextCauseResponse(context.Cause(ctx))
 		}
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating queries: %v", err.Error()))
 	}
 	afterLoadingQueries := time.Now()
 
-	responseData, err := runDataQueries(ctx, pCtx, queries, query, d)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return backend.ErrDataResponse(backend.Status(499), "request cancelled") // 499 Client Closed Request
+	// A failed sub-request no longer discards the whole query: whatever data did arrive is
+	// rendered, and the failures come back to be reported as a notice on the frame.
+	responseData, queryErrs := runDataQueries(ctx, pCtx, queries, query, d)
+	if len(responseData) == 0 && len(queryErrs) > 0 {
+		if ctx.Err() != nil {
+			return contextCauseResponse(context.Cause(ctx))
 		}
-		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating getting data: %v", err.Error()))
+		return backend.ErrDataResponseWithSource(backend.StatusBadRequest, backend.ErrorSourceDownstream,
+			fmt.Sprintf("error getting data: %v", errors.Join(queryErrs...)))
 	}
 	afterExecutingQueries := time.Now()
 
@@ -485,6 +501,10 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("error generating data frame: %v", err.Error()))
 	}
 
+	if notice, ok := partialDataNotice(ctx, queryErrs); ok {
+		appendFrameNotice(frame, notice)
+	}
+
 	afterTransformingData := time.Now()
 
 	// output timings
@@ -496,6 +516,43 @@ func (d *SiftDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 	// add the frames to the response.
 	response.Frames = append(response.Frames, frame)
 	return response
+}
+
+// partialDataNotice describes why a query returned less data than asked for, so the panel
+// can render what did arrive with a warning attached rather than showing nothing at all.
+func partialDataNotice(ctx context.Context, queryErrs []error) (data.Notice, bool) {
+	if len(queryErrs) == 0 {
+		// Nothing was lost, so there is nothing to warn about. A context cancelled after
+		// the last request already returned is not a partial result.
+		return data.Notice{}, false
+	}
+
+	// An aborted query explains itself with the reason it was aborted, which is more use
+	// to the reader than the transport errors that abort produced.
+	if ctx.Err() != nil {
+		return data.Notice{
+			Severity: data.NoticeSeverityWarning,
+			Text:     fmt.Sprintf("Showing partial data: %v", context.Cause(ctx)),
+		}, true
+	}
+
+	return data.Notice{
+		Severity: data.NoticeSeverityWarning,
+		Text: fmt.Sprintf("Showing partial data: %d data request(s) failed. First error: %v",
+			len(queryErrs), queryErrs[0]),
+	}, true
+}
+
+// appendFrameNotice attaches a notice to a frame, which Grafana renders as a warning
+// marker on the panel with the text in its tooltip.
+func appendFrameNotice(frame *data.Frame, notice data.Notice) {
+	if frame == nil {
+		return
+	}
+	if frame.Meta == nil {
+		frame.Meta = &data.FrameMeta{}
+	}
+	frame.Meta.Notices = append(frame.Meta.Notices, notice)
 }
 
 // generateQueries creates query objects for both simple channel queries and calculated channel queries.
@@ -605,34 +662,44 @@ func splitQueries(queries []siftApiGetDataSubQuery, chunkSize int) [][]siftApiGe
 	return chunks
 }
 
-func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, d *SiftDatasource) ([]queryResponseData, error) {
+// runDataQueries fetches every sub-query in parallel and returns the rows that came back
+// along with the failures that did not.
+//
+// Chunks deliberately do not share a cancelling context. Under errgroup.WithContext the
+// first failing chunk aborted its siblings and every row already collected was thrown away,
+// so one bad channel blanked the whole panel. Now a chunk failure is recorded and the rest
+// run to completion; the caller decides whether the surviving rows are worth rendering.
+// Real cancellation still reaches every chunk through ctx.
+func runDataQueries(ctx context.Context, pCtx backend.PluginContext, queries []siftApiGetDataSubQuery, query backend.DataQuery, d *SiftDatasource) ([]queryResponseData, []error) {
+	if len(queries) == 0 {
+		return nil, nil
+	}
 	chunks := splitQueries(queries, (len(queries)+maxParallelDataQueries-1)/maxParallelDataQueries)
 
 	var allData []queryResponseData
+	var queryErrs []error
 	var mu sync.Mutex
 
-	// We pass the error group context to allow us to fail fast if any of the chunks fail
-	// versus waiting for all chunks to complete and then returning the error.
-	g, gCtx := errgroup.WithContext(ctx)
+	var g errgroup.Group
 	g.SetLimit(maxParallelDataQueries)
 	for _, chunk := range chunks {
 		chunk := chunk
 		g.Go(func() error {
-			dataResponse, err := d.getData(gCtx, pCtx, chunk, query)
-			if err != nil {
-				return err
-			}
+			dataResponse, err := d.getData(ctx, pCtx, chunk, query)
 			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				queryErrs = append(queryErrs, err)
+				return nil
+			}
 			allData = append(allData, dataResponse...)
-			mu.Unlock()
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	// Every goroutine returns nil, so Wait only blocks; it cannot report an error.
+	_ = g.Wait()
 
-	return allData, nil
+	return allData, queryErrs
 }
 
 func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys map[string]calculatedChannelKey, combineRuns bool, groupByChannelName bool, enumDisplay string) (*data.Frame, error) {
@@ -1459,10 +1526,7 @@ func checkInt64PrecisionLoss(frame *data.Frame) {
 		}
 
 		if warning != "" {
-			if frame.Meta == nil {
-				frame.Meta = &data.FrameMeta{}
-			}
-			frame.Meta.Notices = append(frame.Meta.Notices, data.Notice{
+			appendFrameNotice(frame, data.Notice{
 				Severity: data.NoticeSeverityWarning,
 				Text:     warning,
 			})

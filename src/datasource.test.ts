@@ -1,6 +1,13 @@
+import { DataQueryRequest, DataQueryResponse, FieldType, dateTime, toDataFrame } from '@grafana/data';
+import { Observable, lastValueFrom } from 'rxjs';
 import { SiftDataSource } from './datasource';
 import { getTemplateSrv } from '@grafana/runtime';
 import { SiftQuery, QueryTypes, QUERY_VERSION } from './types';
+
+// Each doSingle loop in @grafana/async-query-data emits only its own target's frames, and
+// the loops are merged. asyncBackendQuery reproduces that so the tests below exercise the
+// real emission shape rather than a single settled response.
+const asyncBackendQuery = jest.fn();
 
 // Mock the getTemplateSrv function
 jest.mock('@grafana/runtime', () => ({
@@ -17,6 +24,9 @@ jest.mock('@grafana/async-query-data', () => ({
     postResource = jest.fn();
     getResource = jest.fn();
     getRef = jest.fn().mockReturnValue({ uid: 'test-uid', type: 'sift-datasource' });
+    query(request: any) {
+      return asyncBackendQuery(request);
+    }
   },
 }));
 
@@ -228,6 +238,72 @@ describe('SiftDataSource', () => {
       // Should have filtered out the empty query
       expect(result.channelDataQueries?.length).toBe(1);
       expect(result.channelDataQueries?.[0].assetQueries?.[0].assetId).toBe('replaced_asset_value');
+    });
+  });
+
+  describe('query', () => {
+    const frame = (refId: string) =>
+      toDataFrame({
+        refId,
+        fields: [
+          { name: 'time', type: FieldType.time, values: [1, 2] },
+          { name: 'value', type: FieldType.number, values: [10, 20] },
+        ],
+      });
+
+    const request = (): DataQueryRequest<SiftQuery> =>
+      ({
+        requestId: 'req',
+        interval: '1m',
+        intervalMs: 60_000,
+        panelId: 7,
+        range: {
+          from: dateTime(1_704_067_200_000),
+          to: dateTime(1_704_070_800_000),
+          raw: { from: dateTime(1_704_067_200_000), to: dateTime(1_704_070_800_000) },
+        },
+        scopedVars: {},
+        targets: [
+          { refId: 'A', queryVersion: QUERY_VERSION, channelDataQueries: [] },
+          { refId: 'B', queryVersion: QUERY_VERSION, channelDataQueries: [] },
+        ],
+        timezone: 'utc',
+        app: 'dashboard',
+        startTime: 0,
+      } as unknown as DataQueryRequest<SiftQuery>);
+
+    it('returns every query block, not just the one that finished last', async () => {
+      asyncBackendQuery.mockImplementation(
+        () =>
+          new Observable<DataQueryResponse>((subscriber) => {
+            subscriber.next({ data: [frame('A')] });
+            subscriber.next({ data: [frame('B')] });
+            subscriber.complete();
+          })
+      );
+
+      const result = await lastValueFrom(datasource.query(request()));
+
+      expect(result.data.map((f: any) => f.refId)).toEqual(['A', 'B']);
+    });
+
+    it('propagates unsubscribe so the backend jobs get cancelled', async () => {
+      const teardown = jest.fn();
+      asyncBackendQuery.mockImplementation(
+        () =>
+          new Observable<DataQueryResponse>((subscriber) => {
+            subscriber.next({ data: [frame('A')] });
+            return teardown;
+          })
+      );
+
+      const subscription = datasource.query(request()).subscribe();
+      // query awaits migrateQuery before subscribing to the inner stream, so let the
+      // microtask queue drain first.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      subscription.unsubscribe();
+
+      expect(teardown).toHaveBeenCalled();
     });
   });
 });

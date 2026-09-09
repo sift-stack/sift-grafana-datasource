@@ -1,10 +1,23 @@
-import { DataQueryRequest, DataQueryResponse, FieldType, dateTime, toDataFrame, Field } from '@grafana/data';
-import { of } from 'rxjs';
+import {
+  DataQueryRequest,
+  DataQueryResponse,
+  DataFrame,
+  FieldType,
+  LoadingState,
+  dateTime,
+  toDataFrame,
+  Field,
+} from '@grafana/data';
+import { EMPTY, Observable, lastValueFrom, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
 import {
   SiftDataSourceCache,
   MIN_LIVE_LOOKBACK_TIME_MS,
+  collectResponses,
   filterFrameByTimeRange,
   appendFramesByTime,
+  mergeResponsesByRefId,
+  responseHasError,
 } from './datasourceCache';
 import { SiftQuery } from './types';
 
@@ -133,7 +146,7 @@ describe('SiftDataSourceCache', () => {
     it('should fetch data when cache is empty', async () => {
       // Request data for the last hour
       const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      const response = await cache.queryWithCache(request, mockFetchCallback);
+      const response = await lastValueFrom(cache.queryWithCache(request, mockFetchCallback));
 
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
       expect(response.data).toHaveLength(1);
@@ -143,13 +156,13 @@ describe('SiftDataSourceCache', () => {
     it('should use cached data when available and time range is contained', async () => {
       // Initial request for the last hour
       const initialRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
 
       // Same request again
       mockFetchCallback.mockClear();
       const sameRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      await cache.queryWithCache(sameRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(sameRequest, mockFetchCallback));
 
       // Should not call fetch again
       expect(mockFetchCallback).not.toHaveBeenCalled();
@@ -158,13 +171,13 @@ describe('SiftDataSourceCache', () => {
     it('should fetch only missing data when expanding time range, left side', async () => {
       // Initial request for last hour
       const initialRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
       // Expanded request for last two hours
       const expandedRequest = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME + HOUR);
-      await cache.queryWithCache(expandedRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(expandedRequest, mockFetchCallback));
 
       // Should fetch only the missing hour
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -176,13 +189,13 @@ describe('SiftDataSourceCache', () => {
     it('should fetch only missing data when expanding time range, right side', async () => {
       // Initial request for last hour
       const initialRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
       // Expanded request for last two hours
       const expandedRequest = createMockRequest(MOCK_TIME, MOCK_TIME + 2 * HOUR);
-      await cache.queryWithCache(expandedRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(expandedRequest, mockFetchCallback));
 
       // Should fetch only the missing hour
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -194,11 +207,11 @@ describe('SiftDataSourceCache', () => {
     it('should always fetch recent data within MIN_LIVE_LOOKBACK_TIME_MS', async () => {
       // Initial request for last hour
       const initialRequest = createMockRequest(MOCK_TIME_NOW - 15 * MINUTE - MINUTE, MOCK_TIME_NOW - MINUTE);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       // Move window by 1 min to simulate grafana live refresh
       const slideRequest = createMockRequest(MOCK_TIME_NOW - 15 * MINUTE, MOCK_TIME_NOW);
-      await cache.queryWithCache(slideRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(slideRequest, mockFetchCallback));
 
       // Should fetch recent data even though the entire range is cached
       expect(mockFetchCallback).toHaveBeenCalledTimes(2);
@@ -213,11 +226,11 @@ describe('SiftDataSourceCache', () => {
     it('should only fetch query time range even if liveish data', async () => {
       // Initial request for last hour
       const initialRequest = createMockRequest(MOCK_TIME - MINUTE, MOCK_TIME_NOW);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       // Same request again
       const sameRequest = createMockRequest(MOCK_TIME - MINUTE, MOCK_TIME_NOW);
-      await cache.queryWithCache(sameRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(sameRequest, mockFetchCallback));
 
       // Should fetch recent data even though the entire range is cached
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -231,13 +244,13 @@ describe('SiftDataSourceCache', () => {
     it('should fetch full range when interval changes', async () => {
       // Initial request with 1m interval
       const initialRequest = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 1, MINUTE);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
       // Same time range but different interval (30s)
       const differentIntervalRequest = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 1, MINUTE / 2);
-      await cache.queryWithCache(differentIntervalRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(differentIntervalRequest, mockFetchCallback));
 
       // Should fetch the full range again
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -249,7 +262,7 @@ describe('SiftDataSourceCache', () => {
     it('should fetch full range when targets change', async () => {
       // Initial request
       const initialRequest = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
@@ -263,7 +276,7 @@ describe('SiftDataSourceCache', () => {
         },
       ];
 
-      await cache.queryWithCache(differentTargetsRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(differentTargetsRequest, mockFetchCallback));
 
       // Should fetch the full range again
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -272,11 +285,11 @@ describe('SiftDataSourceCache', () => {
     it('should clear cache for a specific panel', async () => {
       // Initial request for panel 1
       const panel1Request = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 1);
-      await cache.queryWithCache(panel1Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel1Request, mockFetchCallback));
 
       // Initial request for panel 2
       const panel2Request = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 2);
-      await cache.queryWithCache(panel2Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel2Request, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
@@ -284,10 +297,10 @@ describe('SiftDataSourceCache', () => {
       cache.clearPanelCache(1);
 
       // Request for panel 1 again
-      await cache.queryWithCache(panel1Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel1Request, mockFetchCallback));
 
       // Request for panel 2 again
-      await cache.queryWithCache(panel2Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel2Request, mockFetchCallback));
 
       // Should fetch only for panel 1
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -297,11 +310,11 @@ describe('SiftDataSourceCache', () => {
     it('should clear all cache entries', async () => {
       // Initial request for panel 1
       const panel1Request = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 1);
-      await cache.queryWithCache(panel1Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel1Request, mockFetchCallback));
 
       // Initial request for panel 2
       const panel2Request = createMockRequest(MOCK_TIME - HOUR, MOCK_TIME, 2);
-      await cache.queryWithCache(panel2Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel2Request, mockFetchCallback));
 
       mockFetchCallback.mockClear();
 
@@ -309,10 +322,10 @@ describe('SiftDataSourceCache', () => {
       cache.clearCache();
 
       // Request for panel 1 again
-      await cache.queryWithCache(panel1Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel1Request, mockFetchCallback));
 
       // Request for panel 2 again
-      await cache.queryWithCache(panel2Request, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(panel2Request, mockFetchCallback));
 
       // Should fetch for both panels
       expect(mockFetchCallback).toHaveBeenCalledTimes(2);
@@ -352,11 +365,11 @@ describe('SiftDataSourceCache', () => {
 
       // Initial request for first half of the time range
       const initialRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR / 2);
-      await cache.queryWithCache(initialRequest, mockFetchCallback);
+      await lastValueFrom(cache.queryWithCache(initialRequest, mockFetchCallback));
 
       // Now request the full ranges
       const fullRangeRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      const response = await cache.queryWithCache(fullRangeRequest, mockFetchCallback);
+      const response = await lastValueFrom(cache.queryWithCache(fullRangeRequest, mockFetchCallback));
 
       // The result should have exactly 3 fields: time, value1, value2
       expect(response.data).toHaveLength(1);
@@ -421,7 +434,7 @@ describe('SiftDataSourceCache', () => {
       ];
 
       // Initial request for first half of the time range
-      const initialResponse = await cache.queryWithCache(multiQueryRequest, mockFetchCallback);
+      const initialResponse = await lastValueFrom(cache.queryWithCache(multiQueryRequest, mockFetchCallback));
 
       // Verify we got 3 DataFrames in the response
       expect(initialResponse.data).toHaveLength(3);
@@ -443,7 +456,7 @@ describe('SiftDataSourceCache', () => {
         },
       };
 
-      const expandedResponse = await cache.queryWithCache(expandedRequest, mockFetchCallback);
+      const expandedResponse = await lastValueFrom(cache.queryWithCache(expandedRequest, mockFetchCallback));
 
       // Verify we still got 3 DataFrames in the response after expanding the range
       expect(expandedResponse.data).toHaveLength(3);
@@ -517,10 +530,18 @@ describe('SiftDataSourceCache', () => {
 
         expect(merged.fields).toHaveLength(6);
         expect(merged.fields.find((f) => f.name === 'time')?.values).toEqual([
-          MOCK_TIME, MOCK_TIME, MOCK_TIME + 10 * MINUTE, MOCK_TIME + HOUR, MOCK_TIME + HOUR,
+          MOCK_TIME,
+          MOCK_TIME,
+          MOCK_TIME + 10 * MINUTE,
+          MOCK_TIME + HOUR,
+          MOCK_TIME + HOUR,
         ]);
         expect(merged.fields.find((f) => f.name === 'title')?.values).toEqual([
-          'ch1 val', 'ch2 val', 'ch1 val', 'ch1 val', 'ch2 val',
+          'ch1 val',
+          'ch2 val',
+          'ch1 val',
+          'ch1 val',
+          'ch2 val',
         ]);
         expect(merged.fields.find((f) => f.name === 'annotationId')?.values).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
       });
@@ -558,19 +579,260 @@ describe('SiftDataSourceCache', () => {
           startTime: 0,
         });
 
-        await cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback);
+        await lastValueFrom(cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback));
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
 
         mockFetchCallback.mockClear();
 
         // Same filter — cache hit
-        await cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback);
+        await lastValueFrom(cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback));
         expect(mockFetchCallback).not.toHaveBeenCalled();
 
         // Different filter — cache miss
-        await cache.queryWithCache(makeRequest("asset_name == 'rover_2'"), mockFetchCallback);
+        await lastValueFrom(cache.queryWithCache(makeRequest("asset_name == 'rover_2'"), mockFetchCallback));
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The async query stream: one poll loop per query block, merged
+// ---------------------------------------------------------------------------
+
+const frameWithRefId = (refId: string, name = refId): DataFrame =>
+  toDataFrame({
+    refId,
+    name,
+    fields: [
+      { name: 'time', type: FieldType.time, values: [1, 2, 3] },
+      { name: 'value', type: FieldType.number, values: [10, 20, 30] },
+    ],
+  });
+
+describe('mergeResponsesByRefId', () => {
+  it('keeps frames from every refId, not just the last one to arrive', () => {
+    // This is the shape DatasourceWithAsyncBackend actually produces: block A finishes,
+    // emits only A's frames; block B finishes later, emits only B's.
+    const merged = [{ data: [frameWithRefId('A')] }, { data: [frameWithRefId('B')] }].reduce(mergeResponsesByRefId, {
+      data: [],
+    } as DataQueryResponse);
+
+    expect(merged.data.map((f) => f.refId)).toEqual(['A', 'B']);
+  });
+
+  it('replaces a refId when that block emits again', () => {
+    const first = mergeResponsesByRefId({ data: [] }, { data: [frameWithRefId('A', 'partial')] });
+    const second = mergeResponsesByRefId(first, { data: [frameWithRefId('A', 'complete')] });
+
+    expect(second.data).toHaveLength(1);
+    expect(second.data[0].name).toBe('complete');
+  });
+
+  it('preserves the first-seen order of refIds across re-emissions', () => {
+    let merged: DataQueryResponse = { data: [] };
+    merged = mergeResponsesByRefId(merged, { data: [frameWithRefId('A')] });
+    merged = mergeResponsesByRefId(merged, { data: [frameWithRefId('B')] });
+    merged = mergeResponsesByRefId(merged, { data: [frameWithRefId('A', 'A-again')] });
+
+    expect(merged.data.map((f) => f.refId)).toEqual(['A', 'B']);
+    expect(merged.data[0].name).toBe('A-again');
+  });
+
+  it('accumulates errors from different blocks', () => {
+    let merged: DataQueryResponse = { data: [] };
+    merged = mergeResponsesByRefId(merged, { data: [], errors: [{ refId: 'A', message: 'A failed' }] });
+    merged = mergeResponsesByRefId(merged, { data: [frameWithRefId('B')] });
+
+    expect(merged.errors).toHaveLength(1);
+    expect(merged.data.map((f) => f.refId)).toEqual(['B']);
+  });
+
+  it('clears a block error once that block returns data', () => {
+    let merged: DataQueryResponse = { data: [], errors: [{ refId: 'A', message: 'transient' }] };
+    merged = mergeResponsesByRefId(merged, { data: [frameWithRefId('A')] });
+
+    expect(merged.errors).toBeUndefined();
+    expect(merged.data).toHaveLength(1);
+  });
+});
+
+describe('collectResponses', () => {
+  it('resolves to every block, so a multi-block panel does not lose a series', async () => {
+    const stream = new Observable<DataQueryResponse>((subscriber) => {
+      subscriber.next({ data: [frameWithRefId('A')], state: LoadingState.Done });
+      subscriber.next({ data: [frameWithRefId('B')], state: LoadingState.Done });
+      subscriber.complete();
+    });
+
+    const result = await lastValueFrom(collectResponses(stream));
+
+    expect(result.data.map((f) => f.refId)).toEqual(['A', 'B']);
+    expect(result.state).toBe(LoadingState.Done);
+  });
+
+  it('reports Streaming while blocks are still arriving and Done at the end', async () => {
+    const stream = new Observable<DataQueryResponse>((subscriber) => {
+      subscriber.next({ data: [frameWithRefId('A')] });
+      subscriber.next({ data: [frameWithRefId('B')] });
+      subscriber.complete();
+    });
+
+    const states: Array<LoadingState | undefined> = [];
+    await lastValueFrom(collectResponses(stream).pipe(tap((r) => states.push(r.state))));
+
+    expect(states).toEqual([LoadingState.Streaming, LoadingState.Streaming, LoadingState.Done]);
+  });
+
+  it('emits an empty result rather than rejecting when nothing is queried', async () => {
+    // Every target hidden: DatasourceWithAsyncBackend merges zero loops, so the stream
+    // completes without emitting. lastValueFrom would otherwise reject with EmptyError.
+    const result = await lastValueFrom(collectResponses(EMPTY));
+
+    expect(result.data).toEqual([]);
+    expect(result.state).toBe(LoadingState.Done);
+  });
+
+  it('propagates unsubscribe to the source, which is how the query cancel is sent', () => {
+    const teardown = jest.fn();
+    const stream = new Observable<DataQueryResponse>(() => teardown);
+
+    collectResponses(stream).subscribe().unsubscribe();
+
+    expect(teardown).toHaveBeenCalled();
+  });
+});
+
+describe('responseHasError', () => {
+  it.each([
+    ['errors array', { data: [], errors: [{ message: 'boom' }] }, true],
+    ['deprecated singular error', { data: [], error: { message: 'boom' } }, true],
+    ['error loading state', { data: [], state: LoadingState.Error }, true],
+    ['a healthy response', { data: [frameWithRefId('A')], state: LoadingState.Done }, false],
+  ])('detects %s', (_name, response, expected) => {
+    expect(responseHasError(response as DataQueryResponse)).toBe(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Frame metadata survives the cache, so backend warnings reach the panel
+// ---------------------------------------------------------------------------
+
+describe('frame metadata', () => {
+  const noticeFrame = (refId: string, text: string, times: number[]): DataFrame => {
+    const frame = toDataFrame({
+      refId,
+      fields: [
+        { name: 'time', type: FieldType.time, values: times },
+        { name: 'value', type: FieldType.number, values: times.map(() => 1) },
+      ],
+    });
+    frame.meta = { notices: [{ severity: 'warning', text } as any] };
+    return frame;
+  };
+
+  it('filterFrameByTimeRange keeps notices attached by the backend', () => {
+    const frame = noticeFrame('A', 'Showing partial data: 1 data request(s) failed', [10, 20, 30]);
+
+    const filtered = filterFrameByTimeRange(frame, 10, 20);
+
+    expect(filtered.meta?.notices).toHaveLength(1);
+    expect(filtered.meta?.notices?.[0].text).toContain('partial data');
+  });
+
+  it('appendFramesByTime unions the notices of both slices', () => {
+    const cached = noticeFrame('A', 'cached warning', [10, 20]);
+    const fresh = noticeFrame('A', 'fresh warning', [30, 40]);
+
+    const appended = appendFramesByTime(cached, fresh);
+
+    expect(appended.meta?.notices?.map((n) => n.text)).toEqual(['cached warning', 'fresh warning']);
+  });
+
+  it('appendFramesByTime deduplicates a notice raised on both slices', () => {
+    const cached = noticeFrame('A', 'same warning', [10, 20]);
+    const fresh = noticeFrame('A', 'same warning', [30, 40]);
+
+    expect(appendFramesByTime(cached, fresh).meta?.notices).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// queryWithCache against a realistic multi-emission stream
+// ---------------------------------------------------------------------------
+
+describe('SiftDataSourceCache with an async query stream', () => {
+  const request = (panelId = 1): DataQueryRequest<SiftQuery> => ({
+    requestId: 'mock-request',
+    interval: '1m',
+    intervalMs: 60_000,
+    panelId,
+    range: {
+      from: dateTime(1_704_067_200_000),
+      to: dateTime(1_704_070_800_000),
+      raw: { from: dateTime(1_704_067_200_000), to: dateTime(1_704_070_800_000) },
+    },
+    scopedVars: {},
+    targets: [
+      { refId: 'A', queryVersion: '2', channelDataQueries: [] },
+      { refId: 'B', queryVersion: '2', channelDataQueries: [] },
+    ],
+    timezone: 'utc',
+    app: 'dashboard',
+    startTime: 0,
+  });
+
+  // One poll loop per block, merged: A emits its "started" marker and then its data, B
+  // does the same. Before the fix the cache kept only whichever finished last.
+  const asyncStream = () =>
+    new Observable<DataQueryResponse>((subscriber) => {
+      subscriber.next({ data: [], state: LoadingState.Loading });
+      subscriber.next({ data: [frameWithRefId('A')], state: LoadingState.Done });
+      subscriber.next({ data: [frameWithRefId('B')], state: LoadingState.Done });
+      subscriber.complete();
+    });
+
+  it('returns every query block on a cold fetch', async () => {
+    const cache = new SiftDataSourceCache();
+    const result = await lastValueFrom(cache.queryWithCache(request(), () => asyncStream()));
+
+    expect(result.data.map((f) => f.refId)).toEqual(['A', 'B']);
+  });
+
+  it('caches the merged result, not the last emission', async () => {
+    const cache = new SiftDataSourceCache();
+    const fetchCallback = jest.fn(() => asyncStream());
+
+    await lastValueFrom(cache.queryWithCache(request(), fetchCallback));
+    const second = await lastValueFrom(cache.queryWithCache(request(), fetchCallback));
+
+    expect(fetchCallback).toHaveBeenCalledTimes(1);
+    expect(second.data.map((f) => f.refId)).toEqual(['A', 'B']);
+  });
+
+  it('does not cache a failed response', async () => {
+    const cache = new SiftDataSourceCache();
+    const failing = jest.fn(() => of({ data: [], errors: [{ message: 'backend unavailable' }] }));
+
+    await lastValueFrom(cache.queryWithCache(request(), failing));
+    await lastValueFrom(cache.queryWithCache(request(), failing));
+
+    expect(failing).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache a stream that was unsubscribed before completing', () => {
+    const cache = new SiftDataSourceCache();
+    const fetchCallback = jest.fn(
+      () =>
+        new Observable<DataQueryResponse>((subscriber) => {
+          subscriber.next({ data: [frameWithRefId('A')], state: LoadingState.Done });
+          // never completes: the panel is superseded while B is still running
+        })
+    );
+
+    cache.queryWithCache(request(), fetchCallback).subscribe().unsubscribe();
+    cache.queryWithCache(request(), fetchCallback).subscribe().unsubscribe();
+
+    expect(fetchCallback).toHaveBeenCalledTimes(2);
   });
 });

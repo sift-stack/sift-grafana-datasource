@@ -90,6 +90,24 @@ Both caches may be cleared for a panel by clicking the "Clear cache" button next
 
 Annotations are supported and enable querying Sift Annotations or using regular Sift data queries to visualize data, such as enum state changes, as annotations.
 
+### Advanced Configuration
+
+Data queries run asynchronously. The plugin starts each query block in the background, returns
+immediately, and Grafana polls until the results are ready, so a panel with several query blocks
+loads them at the same time instead of one after another.
+
+The defaults suit most deployments. These environment variables, set on the Grafana process,
+tune the behavior for large dashboards or unusually long queries.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `SIFT_ASYNC_MAX_CONCURRENT_QUERIES` | `32` | How many query blocks may run against Sift at once, across every panel this plugin instance serves. Lower it to reduce read load from dashboards with many panels; raise it if large dashboards are queueing. |
+| `SIFT_ASYNC_JOB_TTL` | `30m` | Ceiling on how long one query block may execute, measured from when it starts running rather than from when it was queued. It exists to stop a stalled read from holding a concurrency slot. Set it to `0` to remove the ceiling and let a query run for as long as the dashboard keeps asking for it. |
+| `SIFT_ASYNC_JOB_IDLE_TIMEOUT` | `60s` | How long a query keeps running after Grafana stops asking for its results. Grafana normally cancels a query it no longer needs; this reclaims the ones where it never gets the chance, such as a closed tab or a dropped connection. |
+
+Durations use Go's format, for example `45s`, `10m` or `2h`. An unset or unparseable value falls
+back to the default, and the plugin logs a warning saying so.
+
 ## Learn More
 
 - [Sift](https://www.siftstack.com/)

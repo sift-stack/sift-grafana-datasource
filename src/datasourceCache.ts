@@ -82,7 +82,7 @@ export class SiftDataSourceCache {
    * If the targets or intervalMs change, the cache is invalidated.
    * If the new query range is outside of the cached window, only the missing data on either side is fetched.
    * Data from now() going back MIN_LIVE_LOOKBACK_TIME_MS is fetched always if it is within the query range.
-   * A refresh with an unchanged range fetches the full range again.
+   * A range inside the cached window (including a refresh of the same range) fetches the full range again.
    * Only usable responses are cached. If a fetch fails, previously cached data is returned instead.
    * */
   async queryWithCache(
@@ -110,12 +110,15 @@ export class SiftDataSourceCache {
         newIntervalMs === cacheEntry.fetchedIntervalMs // same resolution/sample frequency
           ? cacheEntry
           : undefined;
-      const isSameRange =
-        usableCacheEntry?.request.range.from.valueOf() === newFrom &&
-        usableCacheEntry?.request.range.to.valueOf() === newTo;
+      const isWithinCachedRange =
+        usableCacheEntry !== undefined &&
+        usableCacheEntry.request.range.from.valueOf() <= newFrom &&
+        usableCacheEntry.request.range.to.valueOf() >= newTo;
 
       // No usable cache, all data is liveish, or a refresh of the same range → full fetch
-      if (!usableCacheEntry || liveLookbackTime <= newFrom || isSameRange) {
+      // This also results in a fetch on a zoom-in, which is necessary to avoid missing a later
+      // refresh inside that zoomed range, since zooms/refreshes appear the same from Grafana.
+      if (!usableCacheEntry || liveLookbackTime <= newFrom || isWithinCachedRange) {
         const fullData = await lastValueFrom(fetchCallback(request));
 
         if (isUsableResponse(fullData)) {
@@ -161,13 +164,6 @@ export class SiftDataSourceCache {
         } else {
           fetchRanges.push({ from: oldTo, to: newTo });
         }
-      }
-
-      if (fetchRanges.length === 0) {
-        return {
-          ...usableCacheEntry.response,
-          data: usableCacheEntry.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, newFrom, newTo)),
-        };
       }
 
       const cachedFrames: DataFrame[] = usableCacheEntry.response.data;
@@ -313,7 +309,8 @@ export function filterFrameByTimeRange(frame: DataFrame, fromTime: number, toTim
   // Find the time field
   const timeFieldIndex = frame.fields.findIndex((f) => f.type === FieldType.time);
   if (timeFieldIndex === -1) {
-    return frame;
+    // Always copy the frame to avoid a frame shared with the cached being cleared by Grafana.
+    return copyFrame(frame);
   }
 
   // Get time values
@@ -407,6 +404,18 @@ export function appendFramesByTime(cached: DataFrame, fresh: DataFrame): DataFra
   const mapA = buildMap(first);
   const mapB = buildMap(second);
 
+  // Concatenate nanos with the values, filling 0 where only one side has them
+  const getNanos = (df: DataFrame, key: string) =>
+    df.fields.find((f) => (f.labels ? makeCompositeKey(f.name, f.labels) : f.name) === key)?.nanos;
+  const mergeNanos = (key: string) => {
+    const nanosA = getNanos(first, key);
+    const nanosB = getNanos(second, key);
+    if (!nanosA && !nanosB) {
+      return undefined;
+    }
+    return (nanosA ?? Array(first.length).fill(0)).concat(nanosB ?? Array(second.length).fill(0));
+  };
+
   // Concatenate values for each column
   const mergedFields: Field[] = keys.map((key) => {
     const meta = schema.get(key)!;
@@ -415,6 +424,7 @@ export function appendFramesByTime(cached: DataFrame, fresh: DataFrame): DataFra
     return {
       ...meta,
       values: valsA.concat(valsB),
+      nanos: mergeNanos(key),
     };
   });
 

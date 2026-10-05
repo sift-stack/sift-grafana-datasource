@@ -1,10 +1,19 @@
-import { DataQueryRequest, DataQueryResponse, FieldType, dateTime, toDataFrame, Field } from '@grafana/data';
-import { of } from 'rxjs';
+import {
+  DataQueryRequest,
+  DataQueryResponse,
+  FieldType,
+  LoadingState,
+  dateTime,
+  toDataFrame,
+  Field,
+} from '@grafana/data';
+import { Subject, of } from 'rxjs';
 import {
   SiftDataSourceCache,
   MIN_LIVE_LOOKBACK_TIME_MS,
   filterFrameByTimeRange,
   appendFramesByTime,
+  isUsableResponse,
 } from './datasourceCache';
 import { SiftQuery } from './types';
 
@@ -146,10 +155,10 @@ describe('SiftDataSourceCache', () => {
       await cache.queryWithCache(initialRequest, mockFetchCallback);
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
 
-      // Same request again
+      // Narrower range inside the cached window
       mockFetchCallback.mockClear();
-      const sameRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-      await cache.queryWithCache(sameRequest, mockFetchCallback);
+      const containedRequest = createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE);
+      await cache.queryWithCache(containedRequest, mockFetchCallback);
 
       // Should not call fetch again
       expect(mockFetchCallback).not.toHaveBeenCalled();
@@ -219,9 +228,9 @@ describe('SiftDataSourceCache', () => {
       const sameRequest = createMockRequest(MOCK_TIME - MINUTE, MOCK_TIME_NOW);
       await cache.queryWithCache(sameRequest, mockFetchCallback);
 
-      // Should fetch recent data even though the entire range is cached
-      expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
+      // A refresh of the same range fetches the full range again
+      expect(mockFetchCallback).toHaveBeenCalledTimes(2);
+      const fetchedRequest = mockFetchCallback.mock.calls[1][0];
 
       // Should fetch from the larger of live lookback time and request time
       expect(fetchedRequest.range.from.valueOf()).toBeLessThanOrEqual(MOCK_TIME - MINUTE);
@@ -283,11 +292,9 @@ describe('SiftDataSourceCache', () => {
       // Clear cache for panel 1
       cache.clearPanelCache(1);
 
-      // Request for panel 1 again
-      await cache.queryWithCache(panel1Request, mockFetchCallback);
-
-      // Request for panel 2 again
-      await cache.queryWithCache(panel2Request, mockFetchCallback);
+      // Request a range inside the cached window for both panels
+      await cache.queryWithCache(createMockRequest(MOCK_TIME - HOUR, MOCK_TIME - MINUTE, 1), mockFetchCallback);
+      await cache.queryWithCache(createMockRequest(MOCK_TIME - HOUR, MOCK_TIME - MINUTE, 2), mockFetchCallback);
 
       // Should fetch only for panel 1
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
@@ -475,6 +482,242 @@ describe('SiftDataSourceCache', () => {
       });
     });
 
+    describe('failed and refreshed requests', () => {
+      // Shapes Grafana returns for a cancelled request and for a dropped connection
+      const cancelledResponse = (): DataQueryResponse => ({
+        data: [],
+        state: LoadingState.Error,
+        error: { type: 'cancelled' as any, cancelled: true, status: -1, statusText: 'Request was aborted' } as any,
+      });
+      const droppedConnectionResponse = (): DataQueryResponse => ({ data: [], state: LoadingState.Done });
+      const gatewayTimeoutResponse = (): DataQueryResponse => ({
+        data: [],
+        state: LoadingState.Error,
+        error: { status: 504, statusText: 'Gateway Timeout' } as any,
+      });
+
+      const namedFrameResponse = (from: number, to: number, name: string): DataQueryResponse => {
+        const frame = createMockDataFrame(from, to);
+        frame.name = name;
+        return { data: [frame] };
+      };
+
+      it.each([
+        ['cancelled', cancelledResponse],
+        ['dropped connection', droppedConnectionResponse],
+        ['gateway timeout', gatewayTimeoutResponse],
+      ])('should not cache a %s response', async (_name, badResponse) => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        mockFetchCallback.mockImplementationOnce(() => of(badResponse()));
+
+        const first = await cache.queryWithCache(request, mockFetchCallback);
+        expect(first.data).toHaveLength(0);
+
+        // A narrower range would be served from cache if the bad response had been cached
+        const second = await cache.queryWithCache(
+          createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE),
+          mockFetchCallback
+        );
+        expect(mockFetchCallback).toHaveBeenCalledTimes(2);
+        expect(second.data).toHaveLength(1);
+        expect(second.data[0].length).toBeGreaterThan(0);
+      });
+
+      it('should fetch the full range again on a refresh of the same historical range', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR / 2, 'old')));
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        // Data for the second half of the range arrives later (store and forward)
+        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'new')));
+        const refreshed = await cache.queryWithCache(request, mockFetchCallback);
+
+        expect(mockFetchCallback).toHaveBeenCalledTimes(2);
+        expect(mockFetchCallback.mock.calls[1][0].range.from.valueOf()).toBe(MOCK_TIME);
+        expect(mockFetchCallback.mock.calls[1][0].range.to.valueOf()).toBe(MOCK_TIME + HOUR);
+        expect(refreshed.data[0].name).toBe('new');
+        expect(refreshed.data[0].length).toBe(61);
+      });
+
+      it('should keep the last good data when a refresh fails', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'good')));
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        mockFetchCallback.mockImplementationOnce(() => of(gatewayTimeoutResponse()));
+        const failedRefresh = await cache.queryWithCache(request, mockFetchCallback);
+
+        expect(failedRefresh.data).toHaveLength(1);
+        expect(failedRefresh.data[0].name).toBe('good');
+        expect(failedRefresh.data[0].length).toBe(61);
+        // eslint-disable-next-line deprecation/deprecation
+        expect(failedRefresh.error?.status).toBe(504);
+
+        // The good data is still cached
+        mockFetchCallback.mockClear();
+        const contained = await cache.queryWithCache(
+          createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE),
+          mockFetchCallback
+        );
+        expect(mockFetchCallback).not.toHaveBeenCalled();
+        expect(contained.data[0].name).toBe('good');
+      });
+
+      it('should not let an older response overwrite a newer one', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        const olderFetch = new Subject<DataQueryResponse>();
+        mockFetchCallback.mockImplementationOnce(() => olderFetch);
+        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'newer')));
+
+        const olderQuery = cache.queryWithCache(request, mockFetchCallback);
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        // The older request finishes last
+        olderFetch.next(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'older'));
+        olderFetch.complete();
+        await olderQuery;
+
+        mockFetchCallback.mockClear();
+        const contained = await cache.queryWithCache(
+          createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE),
+          mockFetchCallback
+        );
+        expect(mockFetchCallback).not.toHaveBeenCalled();
+        expect(contained.data[0].name).toBe('newer');
+      });
+
+      it('should not repopulate a cleared panel cache with an in-flight response', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        const inFlightFetch = new Subject<DataQueryResponse>();
+        mockFetchCallback.mockImplementationOnce(() => inFlightFetch);
+
+        const inFlightQuery = cache.queryWithCache(request, mockFetchCallback);
+        cache.clearPanelCache(1);
+        inFlightFetch.next(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'stale'));
+        inFlightFetch.complete();
+        await inFlightQuery;
+
+        mockFetchCallback.mockClear();
+        await cache.queryWithCache(createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE), mockFetchCallback);
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+      });
+
+      it('should not cache a merged range when a sub-range fetch fails', async () => {
+        await cache.queryWithCache(createMockRequest(MOCK_TIME, MOCK_TIME + HOUR), mockFetchCallback);
+
+        // Expand left, and fail the missing range
+        mockFetchCallback.mockClear();
+        mockFetchCallback.mockImplementationOnce(() => of(cancelledResponse()));
+        const expanded = await cache.queryWithCache(
+          createMockRequest(MOCK_TIME - HOUR, MOCK_TIME + HOUR),
+          mockFetchCallback
+        );
+        expect(expanded.data[0].length).toBe(61);
+
+        // The missing range is fetched again rather than treated as cached
+        mockFetchCallback.mockClear();
+        await cache.queryWithCache(
+          createMockRequest(MOCK_TIME - HOUR + MINUTE, MOCK_TIME + HOUR - MINUTE),
+          mockFetchCallback
+        );
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+        expect(mockFetchCallback.mock.calls[0][0].range.from.valueOf()).toBe(MOCK_TIME - HOUR + MINUTE);
+        expect(mockFetchCallback.mock.calls[0][0].range.to.valueOf()).toBe(MOCK_TIME);
+      });
+
+      it('should use fresh frames for queries that succeeded when another query fails', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        const frameFor = (refId: string, name: string) => {
+          const frame = createMockDataFrame(MOCK_TIME, MOCK_TIME + HOUR, MINUTE, refId);
+          frame.name = name;
+          return frame;
+        };
+        mockFetchCallback.mockImplementationOnce(() =>
+          of({ data: [frameFor('A', 'cached A'), frameFor('B', 'cached B')] })
+        );
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        // Query B fails, query A returns new data
+        mockFetchCallback.mockImplementationOnce(() =>
+          of({
+            data: [frameFor('A', 'fresh A')],
+            errors: [{ message: 'error generating queries', refId: 'B' }],
+            state: LoadingState.Error,
+          })
+        );
+        const refreshed = await cache.queryWithCache(request, mockFetchCallback);
+
+        expect(refreshed.data.map((df) => df.name)).toEqual(['fresh A', 'cached B']);
+        expect(refreshed.errors?.[0].refId).toBe('B');
+      });
+
+      it('should return the error when a sub-range fetch fails', async () => {
+        await cache.queryWithCache(createMockRequest(MOCK_TIME, MOCK_TIME + HOUR), mockFetchCallback);
+
+        mockFetchCallback.mockImplementationOnce(() => of(gatewayTimeoutResponse()));
+        const expanded = await cache.queryWithCache(
+          createMockRequest(MOCK_TIME - HOUR, MOCK_TIME + HOUR),
+          mockFetchCallback
+        );
+
+        expect(expanded.state).toBe(LoadingState.Error);
+        expect(expanded.errors?.[0].status).toBe(504);
+        expect(expanded.data[0].length).toBe(61);
+      });
+
+      it('should not share frames with Grafana, which empties value arrays after rendering', async () => {
+        const emptyValuesInPlace = (response: DataQueryResponse) =>
+          response.data.forEach((frame) => frame.fields.forEach((field: Field) => (field.values.length = 0)));
+
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        emptyValuesInPlace(await cache.queryWithCache(request, mockFetchCallback));
+
+        const contained = createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE);
+        const firstRead = await cache.queryWithCache(contained, mockFetchCallback);
+        emptyValuesInPlace(firstRead);
+        const secondRead = await cache.queryWithCache(contained, mockFetchCallback);
+        expect(secondRead.data[0].fields[0].values).toHaveLength(59);
+
+        // The fallback after a failed refresh must not return emptied frames either
+        mockFetchCallback.mockImplementationOnce(() => of(cancelledResponse()));
+        const fallback = await cache.queryWithCache(request, mockFetchCallback);
+        expect(fallback.data[0].fields[0].values).toHaveLength(61);
+      });
+
+      it('should classify responses as usable only when they have frames and no error', () => {
+        expect(isUsableResponse({ data: [createMockDataFrame(MOCK_TIME, MOCK_TIME + MINUTE)] })).toBe(true);
+        expect(isUsableResponse(cancelledResponse())).toBe(false);
+        expect(isUsableResponse(droppedConnectionResponse())).toBe(false);
+        expect(isUsableResponse(gatewayTimeoutResponse())).toBe(false);
+        expect(
+          isUsableResponse({
+            data: [createMockDataFrame(MOCK_TIME, MOCK_TIME + MINUTE)],
+            errors: [{ message: 'partial failure', refId: 'B' }],
+          })
+        ).toBe(false);
+      });
+    });
+
+    it('should keep frame meta when filtering by time range', () => {
+      const frame = createMockDataFrame(MOCK_TIME, MOCK_TIME + HOUR);
+      frame.meta = { type: 'timeseries-wide' as any, notices: [{ severity: 'warning', text: 'note' }] };
+
+      const filtered = filterFrameByTimeRange(frame, MOCK_TIME, MOCK_TIME + HOUR / 2);
+
+      expect(filtered.meta).toEqual(frame.meta);
+      expect(filtered.length).toBe(31);
+    });
+
+    it('should filter time field nanos with the values', () => {
+      const frame = createMockDataFrame(MOCK_TIME, MOCK_TIME + 4 * MINUTE);
+      frame.fields[0].nanos = [0, 1, 2, 3, 4];
+
+      const filtered = filterFrameByTimeRange(frame, MOCK_TIME + MINUTE, MOCK_TIME + 2 * MINUTE);
+
+      expect(filtered.fields[0].values).toEqual([MOCK_TIME + MINUTE, MOCK_TIME + 2 * MINUTE]);
+      expect(filtered.fields[0].nanos).toEqual([1, 2]);
+    });
+
     describe('annotation frames', () => {
       const createMockAnnotationFrame = (
         annotations: Array<{
@@ -517,10 +760,18 @@ describe('SiftDataSourceCache', () => {
 
         expect(merged.fields).toHaveLength(6);
         expect(merged.fields.find((f) => f.name === 'time')?.values).toEqual([
-          MOCK_TIME, MOCK_TIME, MOCK_TIME + 10 * MINUTE, MOCK_TIME + HOUR, MOCK_TIME + HOUR,
+          MOCK_TIME,
+          MOCK_TIME,
+          MOCK_TIME + 10 * MINUTE,
+          MOCK_TIME + HOUR,
+          MOCK_TIME + HOUR,
         ]);
         expect(merged.fields.find((f) => f.name === 'title')?.values).toEqual([
-          'ch1 val', 'ch2 val', 'ch1 val', 'ch1 val', 'ch2 val',
+          'ch1 val',
+          'ch2 val',
+          'ch1 val',
+          'ch1 val',
+          'ch2 val',
         ]);
         expect(merged.fields.find((f) => f.name === 'annotationId')?.values).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
       });
@@ -533,15 +784,15 @@ describe('SiftDataSourceCache', () => {
           return of({ data: [frame] } as DataQueryResponse);
         });
 
-        const makeRequest = (filter: string): DataQueryRequest<SiftQuery> => ({
+        const makeRequest = (filter: string, to = MOCK_TIME + HOUR): DataQueryRequest<SiftQuery> => ({
           requestId: 'mock-request',
           interval: '1m',
           intervalMs: MINUTE,
           panelId: 1,
           range: {
             from: dateTime(MOCK_TIME),
-            to: dateTime(MOCK_TIME + HOUR),
-            raw: { from: dateTime(MOCK_TIME), to: dateTime(MOCK_TIME + HOUR) },
+            to: dateTime(to),
+            raw: { from: dateTime(MOCK_TIME), to: dateTime(to) },
           },
           scopedVars: {},
           targets: [
@@ -563,8 +814,11 @@ describe('SiftDataSourceCache', () => {
 
         mockFetchCallback.mockClear();
 
-        // Same filter — cache hit
-        await cache.queryWithCache(makeRequest("asset_name == 'rover_1'"), mockFetchCallback);
+        // Same filter, narrower range — cache hit
+        await cache.queryWithCache(
+          makeRequest("asset_name == 'rover_1'", MOCK_TIME + HOUR - MINUTE),
+          mockFetchCallback
+        );
         expect(mockFetchCallback).not.toHaveBeenCalled();
 
         // Different filter — cache miss

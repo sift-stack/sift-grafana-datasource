@@ -82,7 +82,7 @@ export class SiftDataSourceCache {
    * If the targets or intervalMs change, the cache is invalidated.
    * If the new query range is outside of the cached window, only the missing data on either side is fetched.
    * Data from now() going back MIN_LIVE_LOOKBACK_TIME_MS is fetched always if it is within the query range.
-   * A range inside the cached window (including a refresh of the same range) fetches the full range again.
+   * A range inside the cached window, including a refresh of the same range, is served from cache.
    * Only usable responses are cached. If a fetch fails, previously cached data is returned instead.
    * */
   async queryWithCache(
@@ -110,15 +110,9 @@ export class SiftDataSourceCache {
         newIntervalMs === cacheEntry.fetchedIntervalMs // same resolution/sample frequency
           ? cacheEntry
           : undefined;
-      const isWithinCachedRange =
-        usableCacheEntry !== undefined &&
-        usableCacheEntry.request.range.from.valueOf() <= newFrom &&
-        usableCacheEntry.request.range.to.valueOf() >= newTo;
 
-      // No usable cache, all data is liveish, or a refresh of the same range → full fetch
-      // This also results in a fetch on a zoom-in, which is necessary to avoid missing a later
-      // refresh inside that zoomed range, since zooms/refreshes appear the same from Grafana.
-      if (!usableCacheEntry || liveLookbackTime <= newFrom || isWithinCachedRange) {
+      // No usable cache or all data is liveish → full fetch
+      if (!usableCacheEntry || liveLookbackTime <= newFrom) {
         const fullData = await lastValueFrom(fetchCallback(request));
 
         if (isUsableResponse(fullData)) {
@@ -164,6 +158,13 @@ export class SiftDataSourceCache {
         } else {
           fetchRanges.push({ from: oldTo, to: newTo });
         }
+      }
+
+      if (fetchRanges.length === 0) {
+        return {
+          ...usableCacheEntry.response,
+          data: usableCacheEntry.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, newFrom, newTo)),
+        };
       }
 
       const cachedFrames: DataFrame[] = usableCacheEntry.response.data;

@@ -152,20 +152,19 @@ describe('SiftDataSourceCache', () => {
       expect(response.data[0].fields[0].values.length).toBeGreaterThan(0);
     });
 
-    it('should fetch the full range again when the range is inside the cached window', async () => {
+    it('should use cached data when the range is inside the cached window', async () => {
       // Initial request for the last hour
       const initialRequest = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
       await cache.queryWithCache(initialRequest, mockFetchCallback);
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
 
-      // Narrower range inside the cached window, as for a zoom-in or a refresh after a zoom-in
+      // Narrower range inside the cached window, as for a zoom-in
       mockFetchCallback.mockClear();
       const containedRequest = createMockRequest(MOCK_TIME + MINUTE, MOCK_TIME + HOUR - MINUTE);
-      await cache.queryWithCache(containedRequest, mockFetchCallback);
+      const response = await cache.queryWithCache(containedRequest, mockFetchCallback);
 
-      expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      expect(fetchedFrom(0)).toBe(MOCK_TIME + MINUTE);
-      expect(mockFetchCallback.mock.calls[0][0].range.to.valueOf()).toBe(MOCK_TIME + HOUR - MINUTE);
+      expect(mockFetchCallback).not.toHaveBeenCalled();
+      expect(response.data[0].length).toBe(59);
     });
 
     it('should fetch only missing data when expanding time range, left side', async () => {
@@ -232,9 +231,9 @@ describe('SiftDataSourceCache', () => {
       const sameRequest = createMockRequest(MOCK_TIME - MINUTE, MOCK_TIME_NOW);
       await cache.queryWithCache(sameRequest, mockFetchCallback);
 
-      // A refresh of the same range fetches the full range again
-      expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-      const fetchedRequest = mockFetchCallback.mock.calls[1][0];
+      // Should fetch recent data even though the entire range is cached
+      expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
 
       // Should fetch from the larger of live lookback time and request time
       expect(fetchedRequest.range.from.valueOf()).toBeLessThanOrEqual(MOCK_TIME - MINUTE);
@@ -531,43 +530,66 @@ describe('SiftDataSourceCache', () => {
         expect(second.data[0].length).toBeGreaterThan(0);
       });
 
-      it('should fetch the full range again on a refresh of the same historical range', async () => {
+      it('should serve a refresh of the same historical range from cache', async () => {
         const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
         mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR / 2, 'old')));
         await cache.queryWithCache(request, mockFetchCallback);
 
-        // Data for the second half of the range arrives later (store and forward)
+        const refreshed = await cache.queryWithCache(request, mockFetchCallback);
+
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+        expect(refreshed.data[0].name).toBe('old');
+        expect(refreshed.data[0].length).toBe(31);
+      });
+
+      it('should fetch late data for the same historical range after the panel cache is cleared', async () => {
+        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR / 2, 'old')));
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        // Data for the second half of the range arrives later (store and forward), then the user clears the cache
+        cache.clearPanelCache(1);
         mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'new')));
         const refreshed = await cache.queryWithCache(request, mockFetchCallback);
 
         expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-        expect(mockFetchCallback.mock.calls[1][0].range.from.valueOf()).toBe(MOCK_TIME);
+        expect(fetchedFrom(1)).toBe(MOCK_TIME);
         expect(mockFetchCallback.mock.calls[1][0].range.to.valueOf()).toBe(MOCK_TIME + HOUR);
         expect(refreshed.data[0].name).toBe('new');
         expect(refreshed.data[0].length).toBe(61);
+
+        // Later refreshes are served from the new cache entry
+        const again = await cache.queryWithCache(request, mockFetchCallback);
+        expect(mockFetchCallback).toHaveBeenCalledTimes(2);
+        expect(again.data[0].name).toBe('new');
       });
 
       it('should keep the last good data when a refresh fails', async () => {
-        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
-        mockFetchCallback.mockImplementationOnce(() => of(namedFrameResponse(MOCK_TIME, MOCK_TIME + HOUR, 'good')));
+        // A range inside the live lookback window is fetched in full on every refresh
+        const request = createMockRequest(MOCK_TIME_NOW - 5 * MINUTE, MOCK_TIME_NOW);
+        mockFetchCallback.mockImplementationOnce(() =>
+          of(namedFrameResponse(MOCK_TIME_NOW - 5 * MINUTE, MOCK_TIME_NOW, 'good'))
+        );
         await cache.queryWithCache(request, mockFetchCallback);
 
         mockFetchCallback.mockImplementationOnce(() => of(gatewayTimeoutResponse()));
         const failedRefresh = await cache.queryWithCache(request, mockFetchCallback);
 
+        expect(mockFetchCallback).toHaveBeenCalledTimes(2);
         expect(failedRefresh.data).toHaveLength(1);
         expect(failedRefresh.data[0].name).toBe('good');
-        expect(failedRefresh.data[0].length).toBe(61);
+        expect(failedRefresh.data[0].length).toBe(6);
         // eslint-disable-next-line deprecation/deprecation
         expect(failedRefresh.error?.status).toBe(504);
 
         // The good data is still cached, so an expanded range fetches only the missing sub-range
         mockFetchCallback.mockClear();
         const expanded = await cache.queryWithCache(
-          createMockRequest(MOCK_TIME, MOCK_TIME + HOUR + 10 * MINUTE),
+          createMockRequest(MOCK_TIME_NOW - 15 * MINUTE, MOCK_TIME_NOW),
           mockFetchCallback
         );
-        expect(fetchedFrom(0)).toBe(MOCK_TIME + HOUR);
+        expect(mockFetchCallback).toHaveBeenCalledTimes(1);
+        expect(fetchedFrom(0)).toBe(MOCK_TIME_NOW - 15 * MINUTE);
         expect(expanded.data[0].name).toBe('good');
       });
 
@@ -635,9 +657,10 @@ describe('SiftDataSourceCache', () => {
       });
 
       it('should use fresh frames for queries that succeeded when another query fails', async () => {
-        const request = createMockRequest(MOCK_TIME, MOCK_TIME + HOUR);
+        // A range inside the live lookback window is fetched in full on every refresh
+        const request = createMockRequest(MOCK_TIME_NOW - 5 * MINUTE, MOCK_TIME_NOW);
         const frameFor = (refId: string, name: string) => {
-          const frame = createMockDataFrame(MOCK_TIME, MOCK_TIME + HOUR, MINUTE, refId);
+          const frame = createMockDataFrame(MOCK_TIME_NOW - 5 * MINUTE, MOCK_TIME_NOW, MINUTE, refId);
           frame.name = name;
           return frame;
         };

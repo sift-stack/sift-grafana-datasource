@@ -9,8 +9,11 @@ import {
   Field,
   Labels,
   FieldConfig,
+  LoadingState,
+  DataQueryError,
+  QueryResultMetaNotice,
 } from '@grafana/data';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable, lastValueFrom } from 'rxjs';
 import { SiftQuery } from './types';
 import { replaceTemplateVariablesInQuery } from './utils';
 
@@ -22,19 +25,50 @@ interface CacheEntry {
   response: DataQueryResponse;
   targetsKey: string;
   fetchedIntervalMs: number;
+  seq: number;
+}
+
+// Added to cached frames that are shown in place of a failed or empty response
+const STALE_DATA_NOTICE: QueryResultMetaNotice = {
+  severity: 'warning',
+  text: 'The latest query failed or returned no data. Showing cached data, which can be out of date.',
+};
+
+// eslint-disable-next-line deprecation/deprecation -- Grafana 13 still sets only `error` on cancelled requests
+const responseError = (r: DataQueryResponse): DataQueryError | undefined => r.errors?.[0] ?? r.error;
+
+// Cancelled, failed, and empty responses must never be cached. Grafana reports a cancelled or non-200
+// request with only `error` set, and a dropped connection with no error at all.
+export function isUsableResponse(response: DataQueryResponse): boolean {
+  return !responseError(response) && response.state !== LoadingState.Error && response.data.length > 0;
 }
 
 export class SiftDataSourceCache {
   private cache: Map<number, CacheEntry> = new Map();
+  // Sequence numbers stop a slow, older request from overwriting the result of a newer one
+  private requestSeq = 0;
+  private lastWrittenSeq: Map<number, number> = new Map();
+  private clearedSeq = 0;
 
   clearCache() {
     this.cache.clear();
+    this.clearedSeq = this.requestSeq;
   }
 
   clearPanelCache(panelId?: number) {
     if (panelId !== undefined) {
       this.cache.delete(panelId);
+      this.lastWrittenSeq.set(panelId, this.requestSeq);
     }
+  }
+
+  private setCacheEntry(panelId: number, entry: CacheEntry) {
+    const floor = Math.max(this.lastWrittenSeq.get(panelId) ?? 0, this.clearedSeq);
+    if (entry.seq <= floor) {
+      return;
+    }
+    this.cache.set(panelId, { ...entry, response: { ...entry.response, data: entry.response.data.map(copyFrame) } });
+    this.lastWrittenSeq.set(panelId, entry.seq);
   }
 
   // very basic key generation from the query. Any change a user makes will invalidate (including ordering of the queries)
@@ -55,12 +89,15 @@ export class SiftDataSourceCache {
    * If the targets or intervalMs change, the cache is invalidated.
    * If the new query range is outside of the cached window, only the missing data on either side is fetched.
    * Data from now() going back MIN_LIVE_LOOKBACK_TIME_MS is fetched always if it is within the query range.
+   * A range inside the cached window, including a refresh of the same range, is served from cache.
+   * Only usable responses are cached. If a fetch fails, previously cached data is returned instead.
    * */
   async queryWithCache(
     request: DataQueryRequest<SiftQuery>,
     fetchCallback: (req: DataQueryRequest<SiftQuery>) => Observable<DataQueryResponse>
   ): Promise<DataQueryResponse> {
     const panelId = typeof request.panelId === 'number' ? request.panelId : -1; // if not in a dashboard, will be "undefined"
+    const seq = ++this.requestSeq;
     try {
       const liveLookbackTime = Date.now() - MIN_LIVE_LOOKBACK_TIME_MS;
 
@@ -74,31 +111,41 @@ export class SiftDataSourceCache {
       const isLiveishData = newTo >= liveLookbackTime;
 
       const cacheEntry = this.cache.get(panelId);
+      const usableCacheEntry =
+        cacheEntry &&
+        currentTargetsKey === cacheEntry.targetsKey && // targets (query) unchanged
+        newIntervalMs === cacheEntry.fetchedIntervalMs // same resolution/sample frequency
+          ? cacheEntry
+          : undefined;
 
-      // No cache yet or targets/interval changed/data is within min live time → full fetch
-      if (
-        !cacheEntry || // no cache data
-        cacheEntry.response?.errors || // cache has errors
-        currentTargetsKey !== cacheEntry.targetsKey || // targets (query) changed
-        newIntervalMs !== cacheEntry.fetchedIntervalMs || // new resolution/sample frequency requested
-        liveLookbackTime <= newFrom // all data is liveish
-      ) {
-        const fullData = await firstValueFrom(fetchCallback(request));
+      // No usable cache or all data is liveish → full fetch
+      if (!usableCacheEntry || liveLookbackTime <= newFrom) {
+        const fullData = await lastValueFrom(fetchCallback(request));
 
-        // Store in cache
-        this.cache.set(panelId, {
-          request,
-          response: fullData,
-          targetsKey: currentTargetsKey,
-          fetchedIntervalMs: request.intervalMs,
-        });
+        if (isUsableResponse(fullData)) {
+          this.setCacheEntry(panelId, {
+            request,
+            response: fullData,
+            targetsKey: currentTargetsKey,
+            fetchedIntervalMs: request.intervalMs,
+            seq,
+          });
+          return fullData;
+        }
 
+        // Keep showing the last good data for failed queries, and keep any error so the panel can show it
+        if (usableCacheEntry) {
+          const cachedFrames = usableCacheEntry.response.data.map((df: DataFrame) =>
+            filterFrameByTimeRange(df, newFrom, newTo)
+          );
+          return { ...fullData, data: mergeWithCachedFrames(fullData, cachedFrames) };
+        }
         return fullData;
       }
 
       // We have a cache with same targets/interval: figure out missing sub‑ranges
-      const oldFrom = cacheEntry.request.range.from.valueOf();
-      const oldTo = cacheEntry.request.range.to.valueOf();
+      const oldFrom = usableCacheEntry.request.range.from.valueOf();
+      const oldTo = usableCacheEntry.request.range.to.valueOf();
       let cacheFrom = oldFrom;
       let cacheTo = oldTo;
 
@@ -122,12 +169,12 @@ export class SiftDataSourceCache {
 
       if (fetchRanges.length === 0) {
         return {
-          ...cacheEntry.response,
-          data: cacheEntry.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, newFrom, newTo)),
+          ...usableCacheEntry.response,
+          data: usableCacheEntry.response.data.map((df: DataFrame) => filterFrameByTimeRange(df, newFrom, newTo)),
         };
       }
 
-      const cachedFrames: DataFrame[] = cacheEntry.response.data;
+      const cachedFrames: DataFrame[] = usableCacheEntry.response.data;
 
       // If we're looking at live data, filter out the recent data from the cached frame
       let trimmedCacheFrames = cachedFrames;
@@ -138,6 +185,7 @@ export class SiftDataSourceCache {
       }
 
       let newFrames: DataFrame[][] = [];
+      let fetchError: DataQueryError | undefined;
       // Sequential processing using reduce since parallel requests will cancel each other
       await fetchRanges.reduce(async (previousPromise, rng) => {
         await previousPromise; // Wait for the previous request to complete
@@ -152,10 +200,11 @@ export class SiftDataSourceCache {
             },
           };
 
-          const subResp = await firstValueFrom(fetchCallback(subReq));
-          if (!subResp.errors && subResp.data.length > 0) {
+          const subResp = await lastValueFrom(fetchCallback(subReq));
+          if (isUsableResponse(subResp)) {
             newFrames.push(subResp.data);
           } else {
+            fetchError = fetchError ?? responseError(subResp) ?? { message: 'No data returned' };
             console.error(
               `Panel ${panelId} - Failed to fetch data from ${new Date(rng.from).toISOString()} to ${new Date(
                 rng.to
@@ -164,6 +213,7 @@ export class SiftDataSourceCache {
             );
           }
         } catch (error) {
+          fetchError = fetchError ?? { message: String(error) };
           console.error(
             `Panel ${panelId} - Error fetching range ${new Date(rng.from).toISOString()} to ${new Date(
               rng.to
@@ -201,22 +251,59 @@ export class SiftDataSourceCache {
 
       const filteredFrames = updatedCacheFrames.map((frame) => filterFrameByTimeRange(frame, newFrom, newTo));
 
-      const result: DataQueryResponse = { data: filteredFrames };
+      const result: DataQueryResponse = fetchError
+        ? { data: filteredFrames, errors: [fetchError], state: LoadingState.Error }
+        : { data: filteredFrames };
 
-      // Update cache to this full new range+response
-      this.cache.set(panelId, {
-        request,
-        response: result,
-        targetsKey: currentTargetsKey,
-        fetchedIntervalMs: newIntervalMs,
-      });
+      // Update cache to this full new range+response. Skip it if a range failed.
+      if (!fetchError) {
+        this.setCacheEntry(panelId, {
+          request,
+          response: result,
+          targetsKey: currentTargetsKey,
+          fetchedIntervalMs: newIntervalMs,
+          seq,
+        });
+      }
 
       return result;
     } catch (e) {
       console.error(`Panel ${panelId} - Failed to handle cache`, e);
-      return await firstValueFrom(fetchCallback(request));
+      return await lastValueFrom(fetchCallback(request));
     }
   }
+}
+
+// Uses fresh frames for queries that succeeded, and cached frames for queries that failed or returned nothing.
+// The backend returns one frame per refId.
+function mergeWithCachedFrames(fresh: DataQueryResponse, cachedFrames: DataFrame[]): DataFrame[] {
+  const failedRefIds = new Set(fresh.errors?.map((e) => e.refId));
+  const refIdToFrameMap = new Map<string | undefined, DataFrame>();
+  cachedFrames.forEach((df) => refIdToFrameMap.set(df.refId, withStaleNotice(df)));
+  fresh.data.forEach((df: DataFrame) => {
+    if (!failedRefIds.has(df.refId)) {
+      refIdToFrameMap.set(df.refId, df);
+    }
+  });
+  return Array.from(refIdToFrameMap.values());
+}
+
+// Copies meta so the notice is never added to the cached entry
+function withStaleNotice(frame: DataFrame): DataFrame {
+  return { ...frame, meta: { ...frame.meta, notices: [...(frame.meta?.notices ?? []), STALE_DATA_NOTICE] } };
+}
+
+// Grafana empties the value arrays of frames it has finished rendering, so the cache must hold its own copy
+export function copyFrame(frame: DataFrame): DataFrame {
+  return {
+    ...frame,
+    fields: frame.fields.map((field) => ({
+      ...field,
+      values: field.values.slice(),
+      ...(field.nanos && { nanos: field.nanos.slice() }),
+      state: undefined,
+    })),
+  };
 }
 
 // Filters a DataFrame to only include rows within the specified time range
@@ -224,7 +311,8 @@ export function filterFrameByTimeRange(frame: DataFrame, fromTime: number, toTim
   // Find the time field
   const timeFieldIndex = frame.fields.findIndex((f) => f.type === FieldType.time);
   if (timeFieldIndex === -1) {
-    return frame;
+    // Always copy the frame to avoid a frame shared with the cached being cleared by Grafana.
+    return copyFrame(frame);
   }
 
   // Get time values
@@ -243,11 +331,14 @@ export function filterFrameByTimeRange(frame: DataFrame, fromTime: number, toTim
   return toDataFrame({
     refId: frame.refId,
     name: frame.name,
+    meta: frame.meta,
     fields: frame.fields.map((field) => {
       const values = field.values;
+      const nanos = field.nanos;
       return {
         ...field,
         values: validIndices.map((i) => values[i]),
+        ...(nanos && { nanos: validIndices.map((i) => nanos[i]) }),
       };
     }),
   });
@@ -315,6 +406,18 @@ export function appendFramesByTime(cached: DataFrame, fresh: DataFrame): DataFra
   const mapA = buildMap(first);
   const mapB = buildMap(second);
 
+  // Concatenate nanos with the values, filling 0 where only one side has them
+  const getNanos = (df: DataFrame, key: string) =>
+    df.fields.find((f) => (f.labels ? makeCompositeKey(f.name, f.labels) : f.name) === key)?.nanos;
+  const mergeNanos = (key: string) => {
+    const nanosA = getNanos(first, key);
+    const nanosB = getNanos(second, key);
+    if (!nanosA && !nanosB) {
+      return undefined;
+    }
+    return (nanosA ?? Array(first.length).fill(0)).concat(nanosB ?? Array(second.length).fill(0));
+  };
+
   // Concatenate values for each column
   const mergedFields: Field[] = keys.map((key) => {
     const meta = schema.get(key)!;
@@ -323,6 +426,7 @@ export function appendFramesByTime(cached: DataFrame, fresh: DataFrame): DataFra
     return {
       ...meta,
       values: valsA.concat(valsB),
+      nanos: mergeNanos(key),
     };
   });
 

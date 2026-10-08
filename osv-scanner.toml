@@ -1,0 +1,5 @@
+# braces has no patched release
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-08
+reason = "No fixed version of braces exists. Dev-only build dependency; inputs are trusted build config globs."

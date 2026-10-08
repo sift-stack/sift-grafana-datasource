@@ -120,8 +120,11 @@ describe('SiftDataSourceCache', () => {
     };
   };
 
-  // Start of the range sent to the backend on the given fetch call. A cache hit fetches only the missing sub-range.
-  const fetchedFrom = (call: number): number => mockFetchCallback.mock.calls[call][0].range.from.valueOf();
+  // Range sent to the backend on the given fetch call. A cache hit fetches only the missing sub-range.
+  const fetchedRange = (call: number): { from: number; to: number } => {
+    const { range } = mockFetchCallback.mock.calls[call][0];
+    return { from: range.from.valueOf(), to: range.to.valueOf() };
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -180,9 +183,7 @@ describe('SiftDataSourceCache', () => {
 
       // Should fetch only the missing hour
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
-      expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME - HOUR);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME - HOUR, to: MOCK_TIME });
     });
 
     it('should fetch only missing data when expanding time range, right side', async () => {
@@ -198,9 +199,7 @@ describe('SiftDataSourceCache', () => {
 
       // Should fetch only the missing hour
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
-      expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME + HOUR);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME + 2 * HOUR);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME + HOUR, to: MOCK_TIME + 2 * HOUR });
     });
 
     it('should always fetch recent data within MIN_LIVE_LOOKBACK_TIME_MS', async () => {
@@ -214,12 +213,8 @@ describe('SiftDataSourceCache', () => {
 
       // Should fetch recent data even though the entire range is cached
       expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-      const fetchedRequest = mockFetchCallback.mock.calls[1][0];
-
       // Should fetch from the live lookback time to current time
-      const liveLookbackTime = MOCK_TIME_NOW - MIN_LIVE_LOOKBACK_TIME_MS;
-      expect(fetchedRequest.range.from.valueOf()).toBe(liveLookbackTime);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME_NOW);
+      expect(fetchedRange(1)).toEqual({ from: MOCK_TIME_NOW - MIN_LIVE_LOOKBACK_TIME_MS, to: MOCK_TIME_NOW });
     });
 
     it('should only fetch query time range even if liveish data', async () => {
@@ -233,11 +228,8 @@ describe('SiftDataSourceCache', () => {
 
       // Should fetch recent data even though the entire range is cached
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
-
       // Should fetch from the larger of live lookback time and request time
-      expect(fetchedRequest.range.from.valueOf()).toBeLessThanOrEqual(MOCK_TIME - MINUTE);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME_NOW);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME - MINUTE, to: MOCK_TIME_NOW });
     });
 
     it('should fetch full range when interval changes', async () => {
@@ -253,9 +245,7 @@ describe('SiftDataSourceCache', () => {
 
       // Should fetch the full range again
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
-      expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME - HOUR);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME - HOUR, to: MOCK_TIME });
     });
 
     it('should fetch full range when targets change', async () => {
@@ -302,9 +292,9 @@ describe('SiftDataSourceCache', () => {
       // Panel 1 fetches the full range, panel 2 fetches only the missing sub-range
       expect(mockFetchCallback).toHaveBeenCalledTimes(2);
       expect(mockFetchCallback.mock.calls[0][0].panelId).toBe(1);
-      expect(fetchedFrom(0)).toBe(MOCK_TIME - HOUR);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME - HOUR, to: MOCK_TIME + MINUTE });
       expect(mockFetchCallback.mock.calls[1][0].panelId).toBe(2);
-      expect(fetchedFrom(1)).toBe(MOCK_TIME);
+      expect(fetchedRange(1)).toEqual({ from: MOCK_TIME, to: MOCK_TIME + MINUTE });
     });
 
     it('should clear all cache entries', async () => {
@@ -468,9 +458,7 @@ describe('SiftDataSourceCache', () => {
       expect(mockFetchCallback).toHaveBeenCalledTimes(1);
 
       // The fetched request should be for the missing range
-      const fetchedRequest = mockFetchCallback.mock.calls[0][0];
-      expect(fetchedRequest.range.from.valueOf()).toBe(MOCK_TIME + HOUR);
-      expect(fetchedRequest.range.to.valueOf()).toBe(MOCK_TIME + HOUR * 2);
+      expect(fetchedRange(0)).toEqual({ from: MOCK_TIME + HOUR, to: MOCK_TIME + HOUR * 2 });
 
       // Each DataFrame should have data for the full requested range
       expandedResponse.data.forEach((frame) => {
@@ -525,7 +513,7 @@ describe('SiftDataSourceCache', () => {
           mockFetchCallback
         );
         expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-        expect(fetchedFrom(1)).toBe(MOCK_TIME);
+        expect(fetchedRange(1)).toEqual({ from: MOCK_TIME, to: MOCK_TIME + HOUR + 10 * MINUTE });
         expect(second.data).toHaveLength(1);
         expect(second.data[0].length).toBeGreaterThan(0);
       });
@@ -553,8 +541,7 @@ describe('SiftDataSourceCache', () => {
         const refreshed = await cache.queryWithCache(request, mockFetchCallback);
 
         expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-        expect(fetchedFrom(1)).toBe(MOCK_TIME);
-        expect(mockFetchCallback.mock.calls[1][0].range.to.valueOf()).toBe(MOCK_TIME + HOUR);
+        expect(fetchedRange(1)).toEqual({ from: MOCK_TIME, to: MOCK_TIME + HOUR });
         expect(refreshed.data[0].name).toBe('new');
         expect(refreshed.data[0].length).toBe(61);
 
@@ -581,6 +568,7 @@ describe('SiftDataSourceCache', () => {
         expect(failedRefresh.data[0].length).toBe(6);
         // eslint-disable-next-line deprecation/deprecation
         expect(failedRefresh.error?.status).toBe(504);
+        expect(failedRefresh.data[0].meta?.notices).toEqual([expect.objectContaining({ severity: 'warning' })]);
 
         // The good data is still cached, so an expanded range fetches only the missing sub-range
         mockFetchCallback.mockClear();
@@ -589,8 +577,22 @@ describe('SiftDataSourceCache', () => {
           mockFetchCallback
         );
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-        expect(fetchedFrom(0)).toBe(MOCK_TIME_NOW - 15 * MINUTE);
+        expect(fetchedRange(0)).toEqual({ from: MOCK_TIME_NOW - 15 * MINUTE, to: MOCK_TIME_NOW - 5 * MINUTE });
         expect(expanded.data[0].name).toBe('good');
+        // The notice is not added to the cached entry
+        expect(expanded.data[0].meta?.notices ?? []).toHaveLength(0);
+      });
+
+      it('should mark cached data as stale when a refresh returns no data and no error', async () => {
+        const request = createMockRequest(MOCK_TIME_NOW - 5 * MINUTE, MOCK_TIME_NOW);
+        await cache.queryWithCache(request, mockFetchCallback);
+
+        mockFetchCallback.mockImplementationOnce(() => of(droppedConnectionResponse()));
+        const failedRefresh = await cache.queryWithCache(request, mockFetchCallback);
+
+        expect(failedRefresh.data).toHaveLength(1);
+        expect(failedRefresh.data[0].length).toBe(6);
+        expect(failedRefresh.data[0].meta?.notices).toEqual([expect.objectContaining({ severity: 'warning' })]);
       });
 
       it('should not let an older response overwrite a newer one', async () => {
@@ -612,7 +614,7 @@ describe('SiftDataSourceCache', () => {
           createMockRequest(MOCK_TIME, MOCK_TIME + HOUR + 10 * MINUTE),
           mockFetchCallback
         );
-        expect(fetchedFrom(0)).toBe(MOCK_TIME + HOUR);
+        expect(fetchedRange(0)).toEqual({ from: MOCK_TIME + HOUR, to: MOCK_TIME + HOUR + 10 * MINUTE });
         expect(expanded.data[0].name).toBe('newer');
       });
 
@@ -630,7 +632,7 @@ describe('SiftDataSourceCache', () => {
         mockFetchCallback.mockClear();
         await cache.queryWithCache(createMockRequest(MOCK_TIME, MOCK_TIME + HOUR + 10 * MINUTE), mockFetchCallback);
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-        expect(fetchedFrom(0)).toBe(MOCK_TIME);
+        expect(fetchedRange(0)).toEqual({ from: MOCK_TIME, to: MOCK_TIME + HOUR + 10 * MINUTE });
       });
 
       it('should not cache a merged range when a sub-range fetch fails', async () => {
@@ -652,8 +654,7 @@ describe('SiftDataSourceCache', () => {
           mockFetchCallback
         );
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-        expect(mockFetchCallback.mock.calls[0][0].range.from.valueOf()).toBe(MOCK_TIME - HOUR + MINUTE);
-        expect(mockFetchCallback.mock.calls[0][0].range.to.valueOf()).toBe(MOCK_TIME);
+        expect(fetchedRange(0)).toEqual({ from: MOCK_TIME - HOUR + MINUTE, to: MOCK_TIME });
       });
 
       it('should use fresh frames for queries that succeeded when another query fails', async () => {
@@ -680,6 +681,8 @@ describe('SiftDataSourceCache', () => {
         const refreshed = await cache.queryWithCache(request, mockFetchCallback);
 
         expect(refreshed.data.map((df) => df.name)).toEqual(['fresh A', 'cached B']);
+        expect(refreshed.data[0].meta?.notices ?? []).toHaveLength(0);
+        expect(refreshed.data[1].meta?.notices).toEqual([expect.objectContaining({ severity: 'warning' })]);
         expect(refreshed.errors?.[0].refId).toBe('B');
       });
 
@@ -881,12 +884,12 @@ describe('SiftDataSourceCache', () => {
         // Same filter, expanded range: cache hit, fetches only the missing sub-range
         await cache.queryWithCache(makeRequest("asset_name == 'rover_1'", MOCK_TIME + 2 * HOUR), mockFetchCallback);
         expect(mockFetchCallback).toHaveBeenCalledTimes(1);
-        expect(fetchedFrom(0)).toBe(MOCK_TIME + HOUR);
+        expect(fetchedRange(0)).toEqual({ from: MOCK_TIME + HOUR, to: MOCK_TIME + 2 * HOUR });
 
         // Different filter: cache miss, fetches the full range
         await cache.queryWithCache(makeRequest("asset_name == 'rover_2'"), mockFetchCallback);
         expect(mockFetchCallback).toHaveBeenCalledTimes(2);
-        expect(fetchedFrom(1)).toBe(MOCK_TIME);
+        expect(fetchedRange(1)).toEqual({ from: MOCK_TIME, to: MOCK_TIME + HOUR });
       });
     });
   });

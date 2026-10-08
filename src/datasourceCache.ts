@@ -11,6 +11,7 @@ import {
   FieldConfig,
   LoadingState,
   DataQueryError,
+  QueryResultMetaNotice,
 } from '@grafana/data';
 import { Observable, lastValueFrom } from 'rxjs';
 import { SiftQuery } from './types';
@@ -27,13 +28,19 @@ interface CacheEntry {
   seq: number;
 }
 
+// Added to cached frames that are shown in place of a failed or empty response
+const STALE_DATA_NOTICE: QueryResultMetaNotice = {
+  severity: 'warning',
+  text: 'The latest query failed or returned no data. Showing cached data, which can be out of date.',
+};
+
+// eslint-disable-next-line deprecation/deprecation -- Grafana 13 still sets only `error` on cancelled requests
+const responseError = (r: DataQueryResponse): DataQueryError | undefined => r.errors?.[0] ?? r.error;
+
 // Cancelled, failed, and empty responses must never be cached. Grafana reports a cancelled or non-200
 // request with only `error` set, and a dropped connection with no error at all.
 export function isUsableResponse(response: DataQueryResponse): boolean {
-  return (
-    // eslint-disable-next-line deprecation/deprecation -- Grafana 13 still sets only `error` on cancelled requests
-    !response.error && !response.errors?.length && response.state !== LoadingState.Error && response.data.length > 0
-  );
+  return !responseError(response) && response.state !== LoadingState.Error && response.data.length > 0;
 }
 
 export class SiftDataSourceCache {
@@ -197,8 +204,7 @@ export class SiftDataSourceCache {
           if (isUsableResponse(subResp)) {
             newFrames.push(subResp.data);
           } else {
-            // eslint-disable-next-line deprecation/deprecation -- Grafana 13 still sets only `error` on cancelled requests
-            fetchError = fetchError ?? subResp.errors?.[0] ?? subResp.error ?? { message: 'No data returned' };
+            fetchError = fetchError ?? responseError(subResp) ?? { message: 'No data returned' };
             console.error(
               `Panel ${panelId} - Failed to fetch data from ${new Date(rng.from).toISOString()} to ${new Date(
                 rng.to
@@ -268,28 +274,23 @@ export class SiftDataSourceCache {
   }
 }
 
-// Uses fresh frames for queries that succeeded, and cached frames for queries that failed or returned nothing
+// Uses fresh frames for queries that succeeded, and cached frames for queries that failed or returned nothing.
+// The backend returns one frame per refId.
 function mergeWithCachedFrames(fresh: DataQueryResponse, cachedFrames: DataFrame[]): DataFrame[] {
   const failedRefIds = new Set(fresh.errors?.map((e) => e.refId));
-  const freshFrames = fresh.data.filter((df: DataFrame) => !failedRefIds.has(df.refId));
-  const freshRefIds = new Set(freshFrames.map((df: DataFrame) => df.refId));
+  const refIdToFrameMap = new Map<string | undefined, DataFrame>();
+  cachedFrames.forEach((df) => refIdToFrameMap.set(df.refId, withStaleNotice(df)));
+  fresh.data.forEach((df: DataFrame) => {
+    if (!failedRefIds.has(df.refId)) {
+      refIdToFrameMap.set(df.refId, df);
+    }
+  });
+  return Array.from(refIdToFrameMap.values());
+}
 
-  const merged: DataFrame[] = [];
-  const added = new Set<string | undefined>();
-  cachedFrames.forEach((df) => {
-    if (!freshRefIds.has(df.refId)) {
-      merged.push(df);
-    } else if (!added.has(df.refId)) {
-      merged.push(...freshFrames.filter((f: DataFrame) => f.refId === df.refId));
-      added.add(df.refId);
-    }
-  });
-  freshFrames.forEach((df: DataFrame) => {
-    if (!added.has(df.refId)) {
-      merged.push(df);
-    }
-  });
-  return merged;
+// Copies meta so the notice is never added to the cached entry
+function withStaleNotice(frame: DataFrame): DataFrame {
+  return { ...frame, meta: { ...frame.meta, notices: [...(frame.meta?.notices ?? []), STALE_DATA_NOTICE] } };
 }
 
 // Grafana empties the value arrays of frames it has finished rendering, so the cache must hold its own copy

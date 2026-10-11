@@ -1063,11 +1063,27 @@ func generateDataFrame(responseData []queryResponseData, calculatedChannelKeys m
 		frame.Fields...,
 	)
 
-	// Add frame metadata
+	// The API reports the resolution it served per channel; Grafana's query inspector shows
+	// Meta.Custom, so this is how a reader tells a raw response from a downsampled one.
+	sampledMs := map[string]int64{}
+	for _, m := range md {
+		name := m.Channel.Name
+		if name == "" {
+			// Calculated channel responses carry no channel name, only the key the
+			// request was built under.
+			if ck, ok := calculatedChannelKeys[m.Channel.ChannelId]; ok {
+				name = ck.channelName
+			} else {
+				name = m.Channel.ChannelId
+			}
+		}
+		sampledMs[name] = m.SampledMs
+	}
 	frame.Meta = &data.FrameMeta{
 		Type:        data.FrameTypeTimeSeriesWide,
 		TypeVersion: data.FrameTypeVersion{0, 1},
 		Notices:     []data.Notice{},
+		Custom:      map[string]any{"sampledMs": sampledMs},
 	}
 
 	// Log and warn for detected while grouping channels above.

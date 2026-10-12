@@ -89,7 +89,12 @@ type apiRequest struct {
 	path        string
 	queryParams url.Values
 	body        interface{}
+	headers     map[string]string
 }
+
+// tierSelectionHeader opts a data request into Sift's downsampled tiers. Sift still reads full
+// resolution when the org doesn't have downsampled reads enabled.
+const tierSelectionHeader = "Grpc-Metadata-X-Tier-Selection"
 
 type siftApiChannel struct {
 	ChannelId string  `json:"channelId"`
@@ -159,6 +164,9 @@ func (d *SiftDatasource) executeRequest(ctx context.Context, req apiRequest) ([]
 
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("User-Agent", fmt.Sprintf("sift-grafana-datasource/%s %s", req.pCtx.PluginVersion, req.pCtx.UserAgent.String()))
+	for k, v := range req.headers {
+		httpReq.Header.Set(k, v)
+	}
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {
@@ -284,10 +292,11 @@ func (d *SiftDatasource) getData(ctx context.Context, pCtx backend.PluginContext
 			return nil, err
 		}
 		req := apiRequest{
-			pCtx:   pCtx,
-			method: "POST",
-			path:   "/api/v2/internal/data",
-			body:   backendQuery,
+			pCtx:    pCtx,
+			method:  "POST",
+			path:    "/api/v2/internal/data",
+			body:    backendQuery,
+			headers: map[string]string{tierSelectionHeader: "downsampled"},
 		}
 
 		respBody, err := d.executeRequest(ctx, req)
